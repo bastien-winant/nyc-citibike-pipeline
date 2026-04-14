@@ -43,8 +43,8 @@ services:
         kestra:
           server:
             basic-auth:
-              username: admin@kestra.io # it must be a valid email address
-              password: Admin1234! # it must be at least 8 characters long with uppercase letter and a number
+              username: admin@kestra.io
+              password: Admin1234!
           repository:
             type: postgres
           storage:
