@@ -1,0 +1,31 @@
+id: push_flows_to_git
+namespace: system
+
+inputs:
+  - id: branch_name
+    type: STRING
+    displayName: Branch to commit to
+
+  - id: commit_message
+    type: STRING
+    displayName: Commit message
+
+  - id: dry_run
+    type: BOOL
+    displayName: Dry run
+    defaults: true
+
+tasks:
+  - id: commit_and_push
+    type: io.kestra.plugin.git.PushFlows
+    username: bastien-winant
+    password: "{{ secret('GITHUB_ACCESS_TOKEN') }}"
+    url: https://github.com/bastien-winant/nyc-citibike-pipeline
+    branch: "{{ inputs.branch_name }}"
+    flows:
+      - '*'
+    # sourceNamespace: dev
+    # targetNamespace: prod
+    gitDirectory: kestra/_flows
+    commitMessage: "{{ inputs.commit_message }}"
+    dryRun: "{{ inputs.dry_run }}"
