@@ -26,7 +26,7 @@ tasks:
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
         env:
-          FILE_ID: "{{ render(vars.file_id) }}"
+          FILE_ID: "{{ render(vars.file_id) }}_{{ taskrun.id }}"
         dependencies:
           - pandas
           - pyarrow
