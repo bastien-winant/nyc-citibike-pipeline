@@ -2,43 +2,44 @@ id: ingest_to_s3
 namespace: company.team
 
 variables:
-  file_id: "{{trigger.date | date('yyyyMM')}}"
+  # file_id: "{{trigger.date | date('yyyyMM')}}"
+  # file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  file_id: 202602
 
 tasks:
   - id: get_zipfile
     type: io.kestra.plugin.core.http.Download
-    uri: https://s3.amazonaws.com/tripdata/JC-{{ render(vars.file_id) }}-citibike-tripdata.csv.zip
+    uri: https://s3.amazonaws.com/tripdata/{{ render(vars.file_id) }}-citibike-tripdata.zip
 
   - id: unzip
     type: io.kestra.plugin.compress.ArchiveDecompress
     algorithm: ZIP
     from: "{{ outputs.get_zipfile.uri }}"
 
-  - id: parquet_output
-    type: io.kestra.plugin.scripts.python.Script
-    taskRunner:
-      type: io.kestra.plugin.scripts.runner.docker.Docker
-    env:
-      FILE_ID: "{{ render(vars.file_id) }}"
-    inputFiles: "{{ outputs.unzip.files }}"
-    dependencies:
-      - pandas
-      - pyarrow
-    script: |
-      import os
-      import pandas as pd
+  - id: each
+    type: io.kestra.plugin.core.flow.ForEach
+    concurrencyLimit: 0
+    values: "{{ outputs.unzip.files | values }}"
+    tasks:
+      - id: read_csv
+        type: io.kestra.plugin.scripts.python.Script
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+        env:
+          FILE_ID: "{{ render(vars.file_id) }}"
+        dependencies:
+          - pandas
+          - pyarrow
+        inputFiles:
+          trip_data.csv: "{{ taskrun.value }}"
+        script: |
+          import os
+          import pandas as pd
 
-      file_id = os.environ["FILE_ID"]
-      file = f"JC-{file_id}-citibike-tripdata.csv"
+          df = pd.read_csv("trip_data.csv", low_memory=False)
 
-      df = pd.read_csv(file)
-      df.to_parquet(f"{file_id}.parquet", index=False)
-    outputFiles:
-      - "*.parquet"
-
-
-triggers:
-  - id: pipeline_schedule
-    type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 0 15 * *"
-
+          file_id = os.environ["FILE_ID"]
+          df.to_parquet(f"{file_id}.parquet", index=False)
+        outputFiles:
+          - "*.parquet"
+          
