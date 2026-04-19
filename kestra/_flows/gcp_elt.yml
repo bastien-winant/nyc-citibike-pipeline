@@ -1,9 +1,10 @@
-id: ingest_to_s3
+id: gcp_elt
 namespace: company.team
 
 variables:
   file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  # file_id: 202602
+  gcs_path: "gs://{{kv('GCP_BUCKET_NAME')}}"
+  table: "{{kv('GCP_DATASET')}}.ridedata_{{trigger.date | date('yyyy_MM')}}"
 
 tasks:
   - id: get_zipfile
@@ -41,10 +42,25 @@ tasks:
           df.to_parquet(f"{file_id}.parquet", index=False)
         outputFiles:
           - "*.parquet"
+      
+      - id: upload_to_gcs
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ outputs.read_csv.outputFiles[render(vars.file_id) ~ '_' ~ taskrun.id ~ '.parquet'] }}"
+        to: "{{render(vars.gcs_path)}}/{{ render(vars.file_id) }}_{{ taskrun.id }}.parquet"
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{kv('GCP_CREDS')}}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"
 
 triggers:
   - id: monthly_schedule
     type: io.kestra.plugin.core.trigger.Schedule
     cron: "0 0 15 * *"
-
-          
