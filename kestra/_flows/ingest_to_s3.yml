@@ -2,9 +2,8 @@ id: ingest_to_s3
 namespace: company.team
 
 variables:
-  # file_id: "{{trigger.date | date('yyyyMM')}}"
-  # file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  file_id: 202602
+  file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  # file_id: 202602
 
 tasks:
   - id: get_zipfile
@@ -31,15 +30,21 @@ tasks:
           - pandas
           - pyarrow
         inputFiles:
-          trip_data.csv: "{{ taskrun.value }}"
+          ride_data.csv: "{{ taskrun.value }}"
         script: |
           import os
           import pandas as pd
 
-          df = pd.read_csv("trip_data.csv", low_memory=False)
+          df = pd.read_csv("ride_data.csv", low_memory=False)
 
           file_id = os.environ["FILE_ID"]
           df.to_parquet(f"{file_id}.parquet", index=False)
         outputFiles:
           - "*.parquet"
+
+triggers:
+  - id: monthly_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 0 15 * *"
+
           
