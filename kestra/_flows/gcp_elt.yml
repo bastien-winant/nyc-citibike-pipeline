@@ -3,8 +3,8 @@ namespace: company.team
 
 variables:
   file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  gcs_path: "gs://{{kv('GCP_BUCKET_NAME')}}"
-  table: "{{kv('GCP_DATASET')}}.ridedata_{{trigger.date | date('yyyy_MM')}}"
+  gcs_path: "gs://{{kv('GCP_BUCKET_NAME')}}/{{trigger.date | dateAdd(-1, 'MONTHS') | date('yyyy-MM')}}"
+  table: "{{kv('GCP_DATASET')}}.ridedata_{{trigger.date | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
 
 tasks:
   - id: get_zipfile
@@ -39,7 +39,31 @@ tasks:
       - id: gcs_upload
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles[render(vars.file_id) ~ '_' ~ taskrun.iteration ~ '.parquet' ] }}"
-        to: "{{ render(vars.gcs_path) }}/{{ render(vars.file_id) }}_{{ taskrun.iteration }}.parquet"
+        to: "{{ render(vars.gcs_path) }}/{{ render(vars.file_id) }}-{{ taskrun.iteration }}.parquet"
+
+  - id: bq_ridedata_table_ext
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE EXTERNAL TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`
+      (
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        started_at TIMESTAMP OPTIONS (description = 'Started at'),
+        ended_at TIMESTAMP OPTIONS (description = 'Ended at'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        start_lat NUMERIC OPTIONS (description = 'Start longitude'),
+        start_lng NUMERIC OPTIONS (description = 'Start latitude'),
+        end_lat NUMERIC OPTIONS (description = 'End longitude'),
+        end_lng NUMERIC OPTIONS (description = 'End latitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride')
+      )
+      OPTIONS (
+        format = 'PARQUET',
+        uris = ['{{ render(vars.gcs_path) }}/*.parquet']
+      );
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
