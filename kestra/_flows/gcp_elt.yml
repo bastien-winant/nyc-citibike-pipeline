@@ -41,7 +41,29 @@ tasks:
         from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles[render(vars.file_id) ~ '_' ~ taskrun.iteration ~ '.parquet' ] }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.file_id) }}-{{ taskrun.iteration }}.parquet"
 
-  - id: bq_ridedata_table_ext
+  - id: bq_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.ridedata`
+      (
+        file_id STRING,
+        ride_id STRING,
+        start_datetime TIMESTAMP,
+        stop_datetime TIMESTAMP,
+        start_station_id STRING,
+        start_station_name STRING,
+        start_station_latitude FLOAT64,
+        start_station_longitude FLOAT64,
+        stop_station_id STRING,
+        stop_station_name STRING,
+        stop_station_latitude FLOAT64,
+        stop_station_longitude FLOAT64,
+        bike_type STRING,
+        user_type STRING
+      )
+      PARTITION BY DATE(start_datetime);
+  
+  - id: bq_table_ext
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
       CREATE OR REPLACE EXTERNAL TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`
@@ -54,10 +76,10 @@ tasks:
         start_station_id STRING OPTIONS (description = 'Start station ID'),
         end_station_name STRING OPTIONS (description = 'End station name'),
         end_station_id STRING OPTIONS (description = 'End station ID'),
-        start_lat NUMERIC OPTIONS (description = 'Start longitude'),
-        start_lng NUMERIC OPTIONS (description = 'Start latitude'),
-        end_lat NUMERIC OPTIONS (description = 'End longitude'),
-        end_lng NUMERIC OPTIONS (description = 'End latitude'),
+        start_lat FLOAT64 OPTIONS (description = 'Start longitude'),
+        start_lng FLOAT64 OPTIONS (description = 'Start latitude'),
+        end_lat FLOAT64 OPTIONS (description = 'End longitude'),
+        end_lng FLOAT64 OPTIONS (description = 'End latitude'),
         member_casual STRING OPTIONS (description = 'Member or casual ride')
       )
       OPTIONS (
@@ -65,7 +87,7 @@ tasks:
         uris = ['{{ render(vars.gcs_path) }}/*.parquet']
       );
 
-  - id: bq_yellow_table_tmp
+  - id: bq_table_stg
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
       CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_stg`
@@ -86,6 +108,16 @@ tasks:
         rideable_type AS bike_type,
         member_casual AS user_type
       FROM `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`;
+
+  - id: incremental_load
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      MERGE INTO `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.ridedata` T
+      USING `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_stg` S
+      ON T.ride_id = S.ride_id
+      WHEN NOT MATCHED THEN
+        INSERT (file_id, ride_id, start_datetime, stop_datetime, start_station_id, start_station_name, start_station_latitude, start_station_longitude, stop_station_id, stop_station_name, stop_station_latitude, stop_station_longitude, bike_type, user_type)
+        VALUES (S.file_id, S.ride_id, S.start_datetime, S.stop_datetime, S.start_station_id, S.start_station_name, S.start_station_latitude, S.start_station_longitude, S.stop_station_id, S.stop_station_name, S.stop_station_latitude, S.stop_station_longitude, S.bike_type, S.user_type);
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
