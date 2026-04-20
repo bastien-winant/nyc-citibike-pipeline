@@ -65,6 +65,28 @@ tasks:
         uris = ['{{ render(vars.gcs_path) }}/*.parquet']
       );
 
+  - id: bq_yellow_table_tmp
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_stg`
+      AS
+      SELECT
+        "{{render(vars.file_id)}}" AS file_id,
+        ride_id,
+        started_at AS start_datetime,
+        ended_at AS stop_datetime,
+        start_station_id,
+        start_station_name,
+        start_lat AS start_station_latitude,
+        start_lng AS start_station_longitude,
+        end_station_id AS stop_station_id,
+        end_station_name AS stop_station_name,
+        end_lat AS stop_station_latitude,
+        end_lng AS stop_station_longitude,
+        rideable_type AS bike_type,
+        member_casual AS user_type
+      FROM `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`;
+
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
