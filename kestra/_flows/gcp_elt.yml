@@ -21,7 +21,7 @@ tasks:
     concurrencyLimit: 0
     values: "{{ outputs.unzip.files | values }}"
     tasks:
-      - id: read_csv
+      - id: csv_to_parquet
         type: io.kestra.plugin.scripts.python.Script
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
@@ -30,22 +30,21 @@ tasks:
         dependencies:
           - pandas
           - pyarrow
-        inputFiles:
-          ride_data.csv: "{{ taskrun.value }}"
         script: |
           import os
           import pandas as pd
 
-          df = pd.read_csv("ride_data.csv", low_memory=False)
+          df = pd.read_csv("{{ taskrun.value }}", low_memory=False)
 
-          file_id = os.environ["FILE_ID"]
-          df.to_parquet(f"{file_id}.parquet", index=False)
+          #file_id = os.environ["FILE_ID"]
+          df.to_parquet("output.parquet", index=False)
         outputFiles:
           - "*.parquet"
-      
-      - id: upload_to_gcs
+
+      - id: gcs_upload
         type: io.kestra.plugin.gcp.gcs.Upload
-        from: "{{ outputs.read_csv.outputFiles[render(vars.file_id) ~ '_' ~ taskrun.id ~ '.parquet'] }}"
+        # from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles[render(vars.file_id) ~ '_' ~ taskrun.id ~ '.parquet' ] }}"
+        from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles['output.parquet' ] }}"
         to: "{{render(vars.gcs_path)}}/{{ render(vars.file_id) }}_{{ taskrun.id }}.parquet"
 
   - id: purge_files
