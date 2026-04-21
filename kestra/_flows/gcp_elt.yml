@@ -2,14 +2,14 @@ id: gcp_elt
 namespace: company.team
 
 variables:
-  file_id: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  data_month: "{{ trigger.date | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   gcs_path: "gs://{{kv('GCP_BUCKET_NAME')}}/{{trigger.date | dateAdd(-1, 'MONTHS') | date('yyyy-MM')}}"
-  table: "{{kv('GCP_DATASET')}}.ridedata_{{trigger.date | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
+  table: "rides_{{trigger.date | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
 
 tasks:
   - id: get_zipfile
     type: io.kestra.plugin.core.http.Download
-    uri: https://s3.amazonaws.com/tripdata/{{ render(vars.file_id) }}-citibike-tripdata.zip
+    uri: https://s3.amazonaws.com/tripdata/{{ render(vars.data_month) }}-citibike-tripdata.zip
 
   - id: unzip
     type: io.kestra.plugin.compress.ArchiveDecompress
@@ -32,21 +32,20 @@ tasks:
           import pandas as pd
 
           df = pd.read_csv("{{ taskrun.value }}", low_memory=False)
-          df.to_parquet(f"{{ render(vars.file_id) }}_{{ taskrun.iteration }}.parquet", index=False)
+          df.to_parquet(f"{{ render(vars.data_month) }}-{{ taskrun.iteration }}.parquet", index=False)
         outputFiles:
           - "*.parquet"
 
       - id: gcs_upload
         type: io.kestra.plugin.gcp.gcs.Upload
-        from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles[render(vars.file_id) ~ '_' ~ taskrun.iteration ~ '.parquet' ] }}"
-        to: "{{ render(vars.gcs_path) }}/{{ render(vars.file_id) }}-{{ taskrun.iteration }}.parquet"
+        from: "{{ outputs.csv_to_parquet[taskrun.value].outputFiles[render(vars.data_month) ~ '-' ~ taskrun.iteration ~ '.parquet' ] }}"
+        to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.parquet"
 
-  - id: bq_table
+  - id: bq_intermediate_table
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.ridedata`
+      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.intermediate.rides`
       (
-        file_id STRING,
         ride_id STRING,
         start_datetime TIMESTAMP,
         stop_datetime TIMESTAMP,
@@ -63,10 +62,10 @@ tasks:
       )
       PARTITION BY DATE(start_datetime);
   
-  - id: bq_table_ext
+  - id: bq_raw_table
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      CREATE OR REPLACE EXTERNAL TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`
+      CREATE OR REPLACE EXTERNAL TABLE `{{kv('GCP_PROJECT_ID')}}.raw.{{render(vars.table)}}_ext`
       (
         ride_id STRING OPTIONS (description = 'Ride ID'),
         rideable_type STRING OPTIONS (description = 'Rideable type'),
@@ -87,13 +86,12 @@ tasks:
         uris = ['{{ render(vars.gcs_path) }}/*.parquet']
       );
 
-  - id: bq_table_stg
+  - id: bg_staging_table
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_stg`
+      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.staging.{{render(vars.table)}}`
       AS
       SELECT
-        "{{render(vars.file_id)}}" AS file_id,
         ride_id,
         started_at AS start_datetime,
         ended_at AS stop_datetime,
@@ -107,17 +105,17 @@ tasks:
         end_lng AS stop_station_longitude,
         rideable_type AS bike_type,
         member_casual AS user_type
-      FROM `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_ext`;
+      FROM `{{kv('GCP_PROJECT_ID')}}.raw.{{render(vars.table)}}_ext`;
 
   - id: incremental_load
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      MERGE INTO `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.ridedata` T
-      USING `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}_stg` S
+      MERGE INTO `{{kv('GCP_PROJECT_ID')}}.intermediate.rides` T
+      USING `{{kv('GCP_PROJECT_ID')}}.staging.{{render(vars.table)}}` S
       ON T.ride_id = S.ride_id
       WHEN NOT MATCHED THEN
-        INSERT (file_id, ride_id, start_datetime, stop_datetime, start_station_id, start_station_name, start_station_latitude, start_station_longitude, stop_station_id, stop_station_name, stop_station_latitude, stop_station_longitude, bike_type, user_type)
-        VALUES (S.file_id, S.ride_id, S.start_datetime, S.stop_datetime, S.start_station_id, S.start_station_name, S.start_station_latitude, S.start_station_longitude, S.stop_station_id, S.stop_station_name, S.stop_station_latitude, S.stop_station_longitude, S.bike_type, S.user_type);
+        INSERT (ride_id, start_datetime, stop_datetime, start_station_id, start_station_name, start_station_latitude, start_station_longitude, stop_station_id, stop_station_name, stop_station_latitude, stop_station_longitude, bike_type, user_type)
+        VALUES (S.ride_id, S.start_datetime, S.stop_datetime, S.start_station_id, S.start_station_name, S.start_station_latitude, S.start_station_longitude, S.stop_station_id, S.stop_station_name, S.stop_station_latitude, S.stop_station_longitude, S.bike_type, S.user_type);
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
