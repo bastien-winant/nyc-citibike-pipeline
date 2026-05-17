@@ -23,15 +23,22 @@ services:
     image: kestra/kestra:latest
     pull_policy: always
     stop_grace_period: 6m
-    env_file: .env_encoded
-    user: "root"
+    user: root
     command: server standalone
     volumes:
       - kestra-data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
+      - /Users/bastienwinant/Desktop/projects/nyc-citibike-pipeline/flows:/docker_folder
+    env_file: .env_encoded
     environment:
       KESTRA_CONFIGURATION: |
+        micronaut:
+          io:
+            watch:
+              enabled: true
+              paths:
+                - /docker_folder
         datasources:
           postgres:
             url: jdbc:postgresql://postgres:5432/kestra
