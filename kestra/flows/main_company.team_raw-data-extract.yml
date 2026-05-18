@@ -1,0 +1,22 @@
+id: raw-data-extract
+namespace: company.team
+description: Request and unzip a zip file from a given URI
+
+inputs:
+  - id: http_uri
+    type: STRING
+
+tasks:
+  - id: get_zip_file
+    type: io.kestra.plugin.core.http.Download
+    uri: "{{ inputs.http_uri }}"
+  
+  - id: unzip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zip_file.uri }}"
+
+outputs:
+  - id: generated_files
+    type: JSON
+    value: "{{ outputs.unzip.files }}"

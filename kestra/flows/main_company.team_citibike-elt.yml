@@ -1,0 +1,24 @@
+id: citibike-elt
+namespace: company.team
+description: Extract, Transform and Load Citibike rides data
+
+variables:
+  file_uri: https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip
+
+tasks:
+  - id: subflow_call
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: raw-data-extract
+    inputs:
+      http_uri: "{{ render(vars.file_uri) }}"
+    wait: true
+    transmitFailed: true
+  
+  - id: for_each
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.subflow_call.outputs.generated_files | values }}"
+    tasks:
+      - id: return
+        type: io.kestra.plugin.core.debug.Return
+        format: "{{ task.id }} with value {{ taskrun.value }}"
