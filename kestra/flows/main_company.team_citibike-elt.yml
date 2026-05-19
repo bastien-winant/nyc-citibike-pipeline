@@ -21,10 +21,6 @@ tasks:
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.extract.outputs.generated_files | values }}"
     tasks:
-      - id: return
-        type: io.kestra.plugin.core.debug.Return
-        format: "{{ task.id }} with value {{ taskrun.value }}"
-
       - id: load
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ taskrun.value }}"
