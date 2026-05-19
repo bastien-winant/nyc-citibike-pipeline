@@ -35,19 +35,19 @@ tasks:
     sql: |
       CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.table_raw) }}_ext`
       (
-        ride_id STRING OPTIONS (description = ''),
-        rideable_type STRING OPTIONS (description = ''),
-        started_at TIMESTAMP OPTIONS (description = ''),
-        ended_at TIMESTAMP OPTIONS (description = ''),
-        start_station_name STRING OPTIONS (description = ''),
-        start_station_id STRING OPTIONS (description = ''),
-        end_station_name STRING OPTIONS (description = ''),
-        end_station_id STRING OPTIONS (description = ''),
-        start_lat NUMERIC OPTIONS (description = ''),
-        start_lng NUMERIC OPTIONS (description = ''),
-        end_lat NUMERIC OPTIONS (description = ''),
-        end_lng NUMERIC OPTIONS (description = ''),
-        member_casual STRING OPTIONS (description = '')
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        started_at TIMESTAMP OPTIONS (description = 'Started at'),
+        ended_at TIMESTAMP OPTIONS (description = 'Ended at'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        start_lat FLOAT64 OPTIONS (description = 'Start latitude'),
+        start_lng FLOAT64 OPTIONS (description = 'Start longitude'),
+        end_lat FLOAT64 OPTIONS (description = 'End latitude'),
+        end_lng FLOAT64 OPTIONS (description = 'End Longitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride')
       )
       OPTIONS (
         format = 'CSV',
