@@ -6,9 +6,11 @@ variables:
   data_month: "{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip"
   gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
+  table_raw: "{{ kv('GCP_DATASET_RAW') }}.citibike_tripdata_{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
 
 tasks:
-  - id: extract
+  # --- 1. Fetch data from source system ---
+  - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
     flowId: raw-data-extract
@@ -16,15 +18,43 @@ tasks:
       http_uri: "{{ render(vars.file_uri) }}"
     wait: true
     transmitFailed: true
-  
+
+  # --- 2. Load the raw data files into the GCS bucket ---
   - id: for_each
     type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.extract.outputs.generated_files | values }}"
+    values: "{{ outputs.extract_raw.outputs.generated_files | values }}"
     tasks:
-      - id: load
+      - id: load_raw
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
+
+  # --- 3. Transfer raw data from GCS into BigQuery
+  - id: bq_trips_table_ext
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.table_raw) }}_ext`
+      (
+        ride_id STRING OPTIONS (description = ''),
+        rideable_type STRING OPTIONS (description = ''),
+        started_at TIMESTAMP OPTIONS (description = ''),
+        ended_at TIMESTAMP OPTIONS (description = ''),
+        start_station_name STRING OPTIONS (description = ''),
+        start_station_id STRING OPTIONS (description = ''),
+        end_station_name STRING OPTIONS (description = ''),
+        end_station_id STRING OPTIONS (description = ''),
+        start_lat NUMERIC OPTIONS (description = ''),
+        start_lng NUMERIC OPTIONS (description = ''),
+        end_lat NUMERIC OPTIONS (description = ''),
+        end_lng NUMERIC OPTIONS (description = ''),
+        member_casual STRING OPTIONS (description = '')
+      )
+      OPTIONS (
+        format = 'CSV',
+        uris = ['{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-*.csv'],
+        skip_leading_rows = 1,
+        ignore_unknown_values = TRUE
+      );
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
