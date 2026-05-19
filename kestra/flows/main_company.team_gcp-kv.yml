@@ -21,8 +21,14 @@ tasks:
     kvType: STRING
     value: citibike-trips-raw-nyc-citibike-pipeline-bw2026
 
-  - id: gcp_dataset
+  - id: gcp_dataset_raw
     type: io.kestra.plugin.core.kv.Set
-    key: GCP_DATASET
+    key: GCP_DATASET_RAW
     kvType: STRING
     value: citibike_trips_raw
+
+  - id: gcp_dataset_clean
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_DATASET_CLEAN
+    kvType: STRING
+    value: citibike_trips_clean
