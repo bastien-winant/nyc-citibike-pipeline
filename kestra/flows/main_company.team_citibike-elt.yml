@@ -9,6 +9,14 @@ variables:
   table_raw: "{{ kv('GCP_DATASET_RAW') }}.citibike_tripdata_{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
 
 tasks:
+  # --- 0. Set up GCP key-values ---
+  - id: gcp_kv_setup
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: gcp-kv
+    wait: true
+    transmitFailed: true
+
   # --- 1. Fetch data from source system ---
   - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
@@ -29,7 +37,7 @@ tasks:
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
 
-  # --- 3. Transfer raw data from GCS into BigQuery
+  # --- 3. Transfer raw data from GCS into BigQuery ---
   - id: bq_trips_table_ext
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
