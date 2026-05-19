@@ -3,10 +3,12 @@ namespace: company.team
 description: Extract, Transform and Load Citibike rides data
 
 variables:
-  file_uri: https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip
+  data_month: "{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  file_uri: "https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip"
+  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
 
 tasks:
-  - id: subflow_call
+  - id: extract
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
     flowId: raw-data-extract
@@ -17,8 +19,21 @@ tasks:
   
   - id: for_each
     type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.subflow_call.outputs.generated_files | values }}"
+    values: "{{ outputs.extract.outputs.generated_files | values }}"
     tasks:
       - id: return
         type: io.kestra.plugin.core.debug.Return
         format: "{{ task.id }} with value {{ taskrun.value }}"
+
+      - id: load
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ taskrun.value }}"
+        to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      location: "{{ kv('GCP_LOCATION') }}"
+      bucket: "{{ kv('GCP_BUCKET_NAME') }}"
