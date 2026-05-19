@@ -32,3 +32,9 @@ variable "bq_dataset_id_raw" {
   description = "ID of the BigQuery Dataset that contains the raw Citibike trip data"
   default     = "citibike_trips_raw"
 }
+
+variable "bq_dataset_id_clean" {
+  type = string
+  description = "ID of the BigQuery Dataset that contains the clean Citibike trip data"
+  default = "citibike_trips_clean"
+}

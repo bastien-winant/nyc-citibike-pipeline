@@ -19,3 +19,9 @@ resource "google_bigquery_dataset" "dataset_raw" {
   location                   = var.location
   delete_contents_on_destroy = true
 }
+
+resource "google_bigquery_dataset" "dataset_clean" {
+  dataset_id                 = var.bq_dataset_id_clean
+  location                   = var.location
+  delete_contents_on_destroy = true
+}
