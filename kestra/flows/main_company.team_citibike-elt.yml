@@ -37,11 +37,33 @@ tasks:
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
 
-  # --- 3. Transfer raw data from GCS into BigQuery ---
-  - id: bq_trips_table_ext
+  # --- 3. Create staging table if not exists
+  - id: bq_trips_table
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.table_raw) }}_ext`
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID' )}}.tripdata`
+      (
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        started_at TIMESTAMP OPTIONS (description = 'Started at'),
+        ended_at TIMESTAMP OPTIONS (description = 'Ended at'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        start_lat FLOAT64 OPTIONS (description = 'Start latitude'),
+        start_lng FLOAT64 OPTIONS (description = 'Start longitude'),
+        end_lat FLOAT64 OPTIONS (description = 'End latitude'),
+        end_lng FLOAT64 OPTIONS (description = 'End Longitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride')
+      )
+      PARTITION BY DATE(started_at)
+
+  # --- 3. Load data from GCS to BigQuery ---
+  - id: bq_trips_table_tmp
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.table_raw) }}_tmp`
       (
         ride_id STRING OPTIONS (description = 'Ride ID'),
         rideable_type STRING OPTIONS (description = 'Rideable type'),
