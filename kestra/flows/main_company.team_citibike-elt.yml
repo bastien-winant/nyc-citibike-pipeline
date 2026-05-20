@@ -37,7 +37,7 @@ tasks:
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
 
-  # --- 3. Create staging table if not exists
+  # --- 3. Create staging table if not exists ---
   - id: bq_trips_table_clean
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
@@ -59,7 +59,7 @@ tasks:
       )
       PARTITION BY DATE(started_at)
 
-  # --- 3. Load data from GCS to BigQuery ---
+  # --- 4. Load data from GCS to BigQuery ---
   - id: bq_trips_table_ext
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
@@ -86,10 +86,11 @@ tasks:
         ignore_unknown_values = TRUE
       );
 
+  # --- 5. CLEAN table: apply basic data checks ---
   - id: bq_trips_table_tmp
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.table)}}`
+      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.raw_table_name)}}`
       AS
       SELECT
         MD5(CONCAT(
@@ -98,7 +99,7 @@ tasks:
           COALESCE(CAST(start_station_id AS STRING), ""),
           COALESCE(CAST(end_station_id AS STRING), "")
         )) AS unique_row_id,
-        SELECT {{ trigger.date | date("M") }} AS trigger_month,
+        {{ execution.startDate | date("M") }} AS trigger_month,
         *
       FROM `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.raw_table_name) }}_ext`
       WHERE (
@@ -106,15 +107,16 @@ tasks:
         AND end_station_id IS NOT NULL
         AND rideable_type IN ('electric_bike', 'classic_bike')
         AND member_casual IN ('member', 'casual')
-        AND EXTRACT(MONTH FROM TIMESTAMP(timestamp_column)) = {{ execution.startDate | date("M") }}
+        AND EXTRACT(MONTH FROM started_at) = {{ execution.startDate | date("M") }}
       );
 
+  # --- 6. ERROR table: all rows that failed the data checks ---
   - id: error_data
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
       CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CLEAN') }}.trips_errors` AS
       SELECT
-        SELECT {{ trigger.date | date("M") }} AS trigger_month,
+        {{ execution.startDate | date("M") }} AS trigger_month,
         *
       FROM `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.raw_table_name) }}_ext`
       WHERE NOT (
@@ -122,7 +124,7 @@ tasks:
         AND end_station_id IS NOT NULL
         AND rideable_type IN ('electric_bike', 'classic_bike')
         AND member_casual IN ('member', 'casual')
-        AND EXTRACT(MONTH FROM TIMESTAMP(timestamp_column)) = {{ execution.startDate | date("M") }}
+        AND EXTRACT(MONTH FROM started_at) = {{ execution.startDate | date("M") }}
       );
 
 pluginDefaults:
