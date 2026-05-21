@@ -31,7 +31,7 @@ tasks:
   # ---------------------------------------------------------
   # 2. PARALLEL GCS UPLOAD
   # ---------------------------------------------------------
-  - id: for_each
+  - id: foreach_upload
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.extract_raw.outputs.generated_files | values }}"
     concurrencyLimit: 5
@@ -128,6 +128,10 @@ tasks:
                   TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
             AND started_at <= ended_at
           );
+
+  # ---------------------------------------------------------
+  # 5. COPY EACH FILE TO ARCHIVE (PER-FILE)
+  # ---------------------------------------------------------
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
