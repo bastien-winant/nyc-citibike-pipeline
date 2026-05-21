@@ -16,7 +16,9 @@ tasks:
     wait: true
     transmitFailed: true
 
-  # --- 1. Fetch RAW data files from source system ---
+  # ---------------------------------------------------------
+  # 1. LIST INPUT FILES
+  # ---------------------------------------------------------
   - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
@@ -26,17 +28,22 @@ tasks:
     wait: true
     transmitFailed: true
 
-  # --- 2. Load RAW data files into the GCS bucket ---
+  # ---------------------------------------------------------
+  # 2. PARALLEL GCS UPLOAD
+  # ---------------------------------------------------------
   - id: for_each
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.extract_raw.outputs.generated_files | values }}"
+    concurrencyLimit: 5
     tasks:
       - id: gcs_load_raw
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
 
-  # --- 3. Load RAW data from GCS into BigQuery
+  # ---------------------------------------------------------
+  # 3. GCS -> BIGQUERY RAW INGESTION
+  # ---------------------------------------------------------
   - id: bq_load_raw
     type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
     from:
