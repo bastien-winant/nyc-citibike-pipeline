@@ -30,11 +30,17 @@ variable "gcs_storage_class" {
 variable "bq_dataset_id_raw" {
   type        = string
   description = "ID of the BigQuery Dataset that contains the raw Citibike trip data"
-  default     = "citibike_trips_raw"
+  default     = "raw"
 }
 
-variable "bq_dataset_id_clean" {
+variable "bq_dataset_id_stg" {
   type = string
-  description = "ID of the BigQuery Dataset that contains the clean Citibike trip data"
-  default = "citibike_trips_clean"
+  description = "ID of the BigQuery Dataset that contains the staging data"
+  default = "stg"
+}
+
+variable "bq_dataset_id_core" {
+  type = string
+  description = "ID of the BigQuery Dataset that contains the core data"
+  default = "core"
 }
