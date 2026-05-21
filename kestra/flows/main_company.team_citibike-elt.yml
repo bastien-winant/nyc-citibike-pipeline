@@ -76,6 +76,32 @@ tasks:
         - name: member_casual
           type: STRING
 
+  - id: clean_data
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips_stg` AS
+      SELECT
+        ride_id,
+        rideable_type,
+        started_at,
+        ended_at,
+        RTRIM(start_station_id, '_') AS start_station_id,
+        start_station_name,
+        start_lat AS start_station_lat,
+        start_lng AS start_station_lng,
+        RTRIM(end_station_id, '_') AS end_station_id,
+        end_station_name,
+        end_lat AS end_station_lat,
+        end_lng AS end_station_lng,
+        member_casual
+      FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_raw`
+      WHERE
+        start_station_id IS NOT NULL
+        AND end_station_id IS NOT NULL
+        AND TIMESTAMP_TRUNC(started_at, MONTH) =
+              TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
+        AND started_at <= ended_at
+
 pluginDefaults:
   - type: io.kestra.plugin.gcp
     values:
