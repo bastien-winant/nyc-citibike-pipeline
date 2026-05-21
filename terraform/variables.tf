@@ -34,13 +34,13 @@ variable "bq_dataset_id_raw" {
 }
 
 variable "bq_dataset_id_stg" {
-  type = string
+  type        = string
   description = "ID of the BigQuery Dataset that contains the staging data"
-  default = "stg"
+  default     = "stg"
 }
 
 variable "bq_dataset_id_core" {
-  type = string
+  type        = string
   description = "ID of the BigQuery Dataset that contains the core data"
-  default = "core"
+  default     = "core"
 }
