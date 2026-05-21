@@ -6,7 +6,6 @@ variables:
   data_month: "{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip"
   gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
-  raw_table_name: "{{ kv('GCP_DATASET_RAW') }}.trips_{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy_MM')}}"
 
 tasks:
   # --- 0. Set up GCP key-values ---
@@ -17,7 +16,7 @@ tasks:
     wait: true
     transmitFailed: true
 
-  # --- 1. Fetch data from source system ---
+  # --- 1. Fetch RAW data files from source system ---
   - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
@@ -27,105 +26,55 @@ tasks:
     wait: true
     transmitFailed: true
 
-  # --- 2. Load the raw data files into the GCS bucket ---
+  # --- 2. Load RAW data files into the GCS bucket ---
   - id: for_each
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.extract_raw.outputs.generated_files | values }}"
     tasks:
-      - id: load_raw
+      - id: gcs_load_raw
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ taskrun.value }}"
         to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
 
-  # --- 3. Create staging table if not exists ---
-  - id: bq_trips_table_clean
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID' )}}.{{ kv('GCP_DATASET_CLEAN') }}.trips`
-      (
-        ride_id STRING OPTIONS (description = 'Ride ID'),
-        rideable_type STRING OPTIONS (description = 'Rideable type'),
-        started_at TIMESTAMP OPTIONS (description = 'Started at'),
-        ended_at TIMESTAMP OPTIONS (description = 'Ended at'),
-        start_station_name STRING OPTIONS (description = 'Start station name'),
-        start_station_id STRING OPTIONS (description = 'Start station ID'),
-        end_station_name STRING OPTIONS (description = 'End station name'),
-        end_station_id STRING OPTIONS (description = 'End station ID'),
-        start_lat FLOAT64 OPTIONS (description = 'Start latitude'),
-        start_lng FLOAT64 OPTIONS (description = 'Start longitude'),
-        end_lat FLOAT64 OPTIONS (description = 'End latitude'),
-        end_lng FLOAT64 OPTIONS (description = 'End Longitude'),
-        member_casual STRING OPTIONS (description = 'Member or casual ride')
-      )
-      PARTITION BY DATE(started_at)
-
-  # --- 4. Load data from GCS to BigQuery ---
-  - id: bq_trips_table_ext
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.raw_table_name) }}_ext`
-      (
-        ride_id STRING OPTIONS (description = 'Ride ID'),
-        rideable_type STRING OPTIONS (description = 'Rideable type'),
-        started_at TIMESTAMP OPTIONS (description = 'Started at'),
-        ended_at TIMESTAMP OPTIONS (description = 'Ended at'),
-        start_station_name STRING OPTIONS (description = 'Start station name'),
-        start_station_id STRING OPTIONS (description = 'Start station ID'),
-        end_station_name STRING OPTIONS (description = 'End station name'),
-        end_station_id STRING OPTIONS (description = 'End station ID'),
-        start_lat FLOAT64 OPTIONS (description = 'Start latitude'),
-        start_lng FLOAT64 OPTIONS (description = 'Start longitude'),
-        end_lat FLOAT64 OPTIONS (description = 'End latitude'),
-        end_lng FLOAT64 OPTIONS (description = 'End Longitude'),
-        member_casual STRING OPTIONS (description = 'Member or casual ride')
-      )
-      OPTIONS (
-        format = 'CSV',
-        uris = ['{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-*.csv'],
-        skip_leading_rows = 1,
-        ignore_unknown_values = TRUE
-      );
-
-  # --- 5. CLEAN table: apply basic data checks ---
-  - id: bq_trips_table_tmp
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{render(vars.raw_table_name)}}`
-      AS
-      SELECT
-        MD5(CONCAT(
-          COALESCE(CAST(started_at AS STRING), ""),
-          COALESCE(CAST(ended_at AS STRING), ""),
-          COALESCE(CAST(start_station_id AS STRING), ""),
-          COALESCE(CAST(end_station_id AS STRING), "")
-        )) AS unique_row_id,
-        {{ execution.startDate | date("M") }} AS trigger_month,
-        *
-      FROM `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.raw_table_name) }}_ext`
-      WHERE (
-        start_station_id IS NOT NULL
-        AND end_station_id IS NOT NULL
-        AND rideable_type IN ('electric_bike', 'classic_bike')
-        AND member_casual IN ('member', 'casual')
-        AND EXTRACT(MONTH FROM started_at) = {{ execution.startDate | date("M") }}
-      );
-
-  # --- 6. ERROR table: all rows that failed the data checks ---
-  - id: error_data
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CLEAN') }}.trips_errors` AS
-      SELECT
-        {{ execution.startDate | date("M") }} AS trigger_month,
-        *
-      FROM `{{ kv('GCP_PROJECT_ID' )}}.{{ render(vars.raw_table_name) }}_ext`
-      WHERE NOT (
-        start_station_id IS NOT NULL
-        AND end_station_id IS NOT NULL
-        AND rideable_type IN ('electric_bike', 'classic_bike')
-        AND member_casual IN ('member', 'casual')
-        AND EXTRACT(MONTH FROM started_at) = {{ execution.startDate | date("M") }}
-      );
+  # --- 3. Load RAW data from GCS into BigQuery
+  - id: bq_load_raw
+    type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
+    from:
+      - "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-*.csv"
+    destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_raw"
+    format: CSV
+    autodetect: true
+    csvOptions:
+      skipLeadingRows: 1
+    writeDisposition: WRITE_TRUNCATE
+    schema:
+      fields:
+        - name: ride_id
+          type: STRING
+        - name: rideable_type
+          type: STRING
+        - name: started_at
+          type: TIMESTAMP
+        - name: ended_at
+          type: TIMESTAMP
+        - name: start_station_name
+          type: STRING
+        - name: start_station_id
+          type: STRING
+        - name: end_station_name
+          type: STRING
+        - name: end_station_id
+          type: STRING
+        - name: start_lat
+          type: FLOAT64
+        - name: start_lng
+          type: FLOAT64
+        - name: end_lat
+          type: FLOAT64
+        - name: end_lng
+          type: FLOAT64
+        - name: member_casual
+          type: STRING
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp

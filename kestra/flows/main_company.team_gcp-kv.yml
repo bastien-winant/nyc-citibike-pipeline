@@ -25,10 +25,16 @@ tasks:
     type: io.kestra.plugin.core.kv.Set
     key: GCP_DATASET_RAW
     kvType: STRING
-    value: citibike_trips_raw
+    value: raw
 
-  - id: gcp_dataset_clean
+  - id: gcp_dataset_stg
     type: io.kestra.plugin.core.kv.Set
-    key: GCP_DATASET_CLEAN
+    key: GCP_DATASET_STG
     kvType: STRING
-    value: citibike_trips_clean
+    value: stg
+
+  - id: gcp_dataset_core
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_DATASET_CORE
+    kvType: STRING
+    value: core
