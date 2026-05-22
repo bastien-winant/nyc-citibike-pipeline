@@ -3,9 +3,9 @@ namespace: company.team
 description: Extract, Transform and Load Citibike rides data
 
 variables:
-  data_month: "{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  file_uri: "https://s3.amazonaws.com/tripdata/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}-citibike-tripdata.zip"
-  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
+  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
+  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
 
 tasks:
   # ---------------------------------------------------------
@@ -19,7 +19,7 @@ tasks:
     transmitFailed: true
 
   # ---------------------------------------------------------
-  # 1. FETCH RAW FILES
+  # 1. EXTRACT AND LOAD RAW FILES TO GCS
   # ---------------------------------------------------------
   - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
@@ -27,24 +27,13 @@ tasks:
     flowId: raw-data-extract
     inputs:
       http_uri: "{{ render(vars.file_uri) }}"
+      gcs_path: "{{ render(vars.gcs_path) }}"
+      data_month: "{{ render(vars.data_month) }}"
     wait: true
     transmitFailed: true
 
   # ---------------------------------------------------------
-  # 2. PARALLEL GCS UPLOAD
-  # ---------------------------------------------------------
-  - id: foreach_upload
-    type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.extract_raw.outputs.generated_files | values }}"
-    concurrencyLimit: 5
-    tasks:
-      - id: gcs_load_raw
-        type: io.kestra.plugin.gcp.gcs.Upload
-        from: "{{ taskrun.value }}"
-        to: "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-{{ taskrun.iteration }}.csv"
-
-  # ---------------------------------------------------------
-  # 3. GCS -> BIGQUERY RAW INGESTION
+  # 2. GCS -> BIGQUERY RAW INGESTION
   # ---------------------------------------------------------
   - id: bq_load_raw
     type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
@@ -86,7 +75,7 @@ tasks:
           type: STRING
 
   # ---------------------------------------------------------
-  # 4. TRIGGER SUBFLOW (BigQuery transformations)
+  # 3. BIGQUERY DATA TRANSFORMATIONS
   # ---------------------------------------------------------
   - id: transform_raw
     type: io.kestra.plugin.core.flow.Subflow
