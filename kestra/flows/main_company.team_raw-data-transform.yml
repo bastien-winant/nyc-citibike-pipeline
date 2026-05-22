@@ -3,6 +3,9 @@ namespace: company.team
 description: Process raw data
 
 tasks:
+  # ---------------------------------------------------------
+  # 1. SPECIAL TRIP DETECTION (PARALLEL)
+  # ---------------------------------------------------------
   - id: classify_trips
     type: io.kestra.plugin.core.flow.Parallel
     tasks:
@@ -32,18 +35,27 @@ tasks:
                   TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
             AND started_at <= ended_at;
 
-      - id: error_data
+      - id: suspicious_trips
         type: io.kestra.plugin.gcp.bigquery.Query
         sql: |
-          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips_errors` AS
+          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.timestamp_errors` AS
+          SELECT *
+          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_raw`
+          WHERE NOT (
+            TIMESTAMP_TRUNC(started_at, MONTH) =
+              TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
+            AND started_at <= ended_at
+          );
+
+      - id: invalid_gps
+        type: io.kestra.plugin.gcp.bigquery.Query
+        sql: |
+          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.invalid_gps` AS
           SELECT *
           FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_raw`
           WHERE NOT (
             start_station_id IS NOT NULL
             AND end_station_id IS NOT NULL
-            AND TIMESTAMP_TRUNC(started_at, MONTH) =
-                  TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
-            AND started_at <= ended_at
           );
 
 pluginDefaults:
