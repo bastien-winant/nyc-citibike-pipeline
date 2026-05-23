@@ -11,7 +11,7 @@ tasks:
   # ---------------------------------------------------------
   # 0. GCP KV SETUP
   # ---------------------------------------------------------
-  - id: gcp_kv_setup
+  - id: setup_gcp_kv
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
     flowId: gcp-kv
@@ -21,7 +21,7 @@ tasks:
   # ---------------------------------------------------------
   # 1. EXTRACT AND LOAD RAW FILES TO GCS
   # ---------------------------------------------------------
-  - id: extract_raw
+  - id: extract_raw_data
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
     flowId: data-extract
@@ -35,56 +35,53 @@ tasks:
   # ---------------------------------------------------------
   # 2. GCS -> BIGQUERY RAW INGESTION
   # ---------------------------------------------------------
-  - id: bq_load_raw
-    type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
-    from:
-      - "{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-*.csv"
-    destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_raw"
-    format: CSV
-    autodetect: true
-    csvOptions:
-      skipLeadingRows: 1
+  - id: create_ext_trips_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_ext`
+      (
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        started_at STRING OPTIONS (description = 'Started at'),
+        ended_at STRING OPTIONS (description = 'Ended at'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        start_lat STRING OPTIONS (description = 'Start latitude'),
+        start_lng STRING OPTIONS (description = 'Start longitude'),
+        end_lat STRING OPTIONS (description = 'End latitude'),
+        end_lng STRING OPTIONS (description = 'End longitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride')
+      )
+      OPTIONS (
+        format = 'CSV',
+        uris = ['{{ render(vars.gcs_path) }}/{{ render(vars.data_month) }}-*.csv'],
+        skip_leading_rows = 1,
+        ignore_unknown_values = TRUE
+      );
+
+  - id: upload_raw_trips_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips"
     writeDisposition: WRITE_APPEND
-    schema:
-      fields:
-        - name: ride_id
-          type: STRING
-        - name: rideable_type
-          type: STRING
-        - name: started_at
-          type: TIMESTAMP
-        - name: ended_at
-          type: TIMESTAMP
-        - name: start_station_name
-          type: STRING
-        - name: start_station_id
-          type: STRING
-        - name: end_station_name
-          type: STRING
-        - name: end_station_id
-          type: STRING
-        - name: start_lat
-          type: FLOAT64
-        - name: start_lng
-          type: FLOAT64
-        - name: end_lat
-          type: FLOAT64
-        - name: end_lng
-          type: FLOAT64
-        - name: member_casual
-          type: STRING
-    timePartitioningField: started_at
-
-  # ---------------------------------------------------------
-  # 3. BIGQUERY DATA TRANSFORMATIONS
-  # ---------------------------------------------------------
-  - id: transform_raw
-    type: io.kestra.plugin.core.flow.Subflow
-    namespace: company.team
-    flowId: data-transform
-    wait: true
-    transmitFailed: true
-
+    sql: |
+      SELECT
+        TIMESTAMP('{{ execution.startDate }}') AS upload_datetime,
+        *
+      FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_ext`
+    timePartitioningField: upload_datetime
+      
+#  # ---------------------------------------------------------
+#  # 3. BIGQUERY DATA TRANSFORMATIONS
+#  # ---------------------------------------------------------
+#  - id: transform_raw
+#    type: io.kestra.plugin.core.flow.Subflow
+#    namespace: company.team
+#    flowId: data-transform
+#    wait: true
+#    transmitFailed: true
+#
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files

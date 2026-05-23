@@ -22,6 +22,11 @@ tasks:
     algorithm: ZIP
     from: "{{ outputs.get_zip_file.uri }}"
 
+  # remove existing files from the target directory
+  - id: purge_directory
+    type: io.kestra.plugin.gcp.gcs.DeleteList
+    from: "{{ inputs.gcs_path }}"
+
   # load CSV files into GCS
   - id: foreach_upload
     type: io.kestra.plugin.core.flow.ForEach
