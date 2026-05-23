@@ -124,6 +124,21 @@ tasks:
         WHERE upload_datetime = TIMESTAMP('{{ execution.startDate }}')
       ) S
       ON T.ride_id = S.ride_id
+      WHEN MATCHED THEN
+      UPDATE SET
+        T.upload_datetime = S.upload_datetime,
+        T.rideable_type = S.rideable_type,
+        T.start_timestamp = S.start_timestamp,
+        T.end_timestamp = S.end_timestamp,
+        T.start_station_id = S.start_station_id,
+        T.start_station_name = S.start_station_name,
+        T.start_station_lat = S.start_station_lat,
+        T.start_station_lng = S.start_station_lng,
+        T.end_station_id = S.end_station_id,
+        T.end_station_name = S.end_station_name,
+        T.end_station_lat = S.end_station_lat,
+        T.end_station_lng = S.end_station_lng,
+        T.member_casual = S.member_casual
       WHEN NOT MATCHED THEN
         INSERT (upload_datetime, ride_id, rideable_type, start_timestamp, end_timestamp, start_station_id,
                 start_station_name, start_station_lat, start_station_lng, end_station_id, end_station_name,
