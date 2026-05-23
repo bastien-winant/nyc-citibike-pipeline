@@ -1,0 +1,62 @@
+id: data-load
+namespace: company.team
+description: Load raw CSV files from GCS to BigQuery
+
+inputs:
+  - id: gcs_path
+    type: STRING
+  - id: data_month
+    type: STRING
+  - id: execution_timestamp
+    type: STRING
+
+tasks:
+  # ---------------------------------------------------------
+  # 1. GCS -> BIGQUERY RAW INGESTION
+  # ---------------------------------------------------------
+  - id: create_ext_trips_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE EXTERNAL TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_ext`
+      (
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        started_at STRING OPTIONS (description = 'Started at'),
+        ended_at STRING OPTIONS (description = 'Ended at'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        start_lat STRING OPTIONS (description = 'Start latitude'),
+        start_lng STRING OPTIONS (description = 'Start longitude'),
+        end_lat STRING OPTIONS (description = 'End latitude'),
+        end_lng STRING OPTIONS (description = 'End longitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride')
+      )
+      OPTIONS (
+        format = 'CSV',
+        uris = ['{{ inputs.gcs_path }}/{{ inputs.data_month }}-*.csv'],
+        skip_leading_rows = 1,
+        ignore_unknown_values = TRUE
+      );
+
+  # ---------------------------------------------------------
+  # 2. RAW TABLE APPEND
+  # ---------------------------------------------------------
+  - id: upload_raw_trips_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips"
+    writeDisposition: WRITE_APPEND
+    sql: |
+      SELECT
+        TIMESTAMP('{{ inputs.execution_timestamp }}') AS upload_datetime,
+        *
+      FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips_ext`
+    timePartitioningField: upload_datetime
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      location: "{{ kv('GCP_LOCATION') }}"
