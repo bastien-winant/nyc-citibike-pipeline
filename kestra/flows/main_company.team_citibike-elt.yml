@@ -44,7 +44,7 @@ tasks:
     autodetect: true
     csvOptions:
       skipLeadingRows: 1
-    writeDisposition: WRITE_TRUNCATE
+    writeDisposition: WRITE_APPEND
     schema:
       fields:
         - name: ride_id
@@ -73,6 +73,7 @@ tasks:
           type: FLOAT64
         - name: member_casual
           type: STRING
+    timePartitioningField: started_at
 
   # ---------------------------------------------------------
   # 3. BIGQUERY DATA TRANSFORMATIONS
