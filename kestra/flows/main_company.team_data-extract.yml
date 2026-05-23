@@ -1,4 +1,4 @@
-id: raw-data-extract
+id: data-extract
 namespace: company.team
 description: Request and unzip a zip file from a given URI
 
@@ -11,15 +11,18 @@ inputs:
     type: STRING
 
 tasks:
+  # fetch the data zip file from the source system
   - id: get_zip_file
     type: io.kestra.plugin.core.http.Download
     uri: "{{ inputs.http_uri }}"
 
+  # decompress the zip file
   - id: unzip
     type: io.kestra.plugin.compress.ArchiveDecompress
     algorithm: ZIP
     from: "{{ outputs.get_zip_file.uri }}"
 
+  # load CSV files into GCS
   - id: foreach_upload
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.unzip.files | values }}"
@@ -36,4 +39,3 @@ pluginDefaults:
       serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
       projectId: "{{ kv('GCP_PROJECT_ID') }}"
       location: "{{ kv('GCP_LOCATION') }}"
-      bucket: "{{ kv('GCP_BUCKET_NAME') }}"

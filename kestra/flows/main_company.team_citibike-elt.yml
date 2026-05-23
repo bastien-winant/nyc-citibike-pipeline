@@ -24,7 +24,7 @@ tasks:
   - id: extract_raw
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
-    flowId: raw-data-extract
+    flowId: data-extract
     inputs:
       http_uri: "{{ render(vars.file_uri) }}"
       gcs_path: "{{ render(vars.gcs_path) }}"
@@ -80,7 +80,7 @@ tasks:
   - id: transform_raw
     type: io.kestra.plugin.core.flow.Subflow
     namespace: company.team
-    flowId: raw-data-transform
+    flowId: data-transform
     wait: true
     transmitFailed: true
 
@@ -94,4 +94,3 @@ pluginDefaults:
       serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
       projectId: "{{ kv('GCP_PROJECT_ID') }}"
       location: "{{ kv('GCP_LOCATION') }}"
-      bucket: "{{ kv('GCP_BUCKET_NAME') }}"
