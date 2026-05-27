@@ -1,6 +1,6 @@
 id: data-load
 namespace: company.team
-description: Load raw CSV files from GCS to BigQuery
+description: Load raw data files from GCS to BigQuery
 
 inputs:
   - id: gcs_path
@@ -34,10 +34,8 @@ tasks:
         member_casual STRING OPTIONS (description = 'Member or casual ride')
       )
       OPTIONS (
-        format = 'CSV',
-        uris = ['{{ inputs.gcs_path }}/{{ inputs.data_month }}-*.csv'],
-        skip_leading_rows = 1,
-        ignore_unknown_values = TRUE
+        format = 'PARQUET',
+        uris = ['{{ inputs.gcs_path }}/{{ inputs.data_month }}-*.parquet']
       );
 
   # ---------------------------------------------------------

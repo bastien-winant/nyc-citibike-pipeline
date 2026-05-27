@@ -1,11 +1,10 @@
-id: citibike-elt
+id: etl-pipeline
 namespace: company.team
-description: Extract, Transform and Load Citibike rides data
 
 variables:
   data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
-  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyy-MM') }}"
+  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ vars.data_month }}"
 
 tasks:
   # ---------------------------------------------------------
