@@ -60,9 +60,18 @@ tasks:
         from: "{{ outputs.ion_to_parquet[taskrun.value].uri }}"
         to: "{{ inputs.gcs_path }}/{{ inputs.data_month }}-{{ taskrun.iteration }}.parquet"
 
+  - id: list_bucket_files
+    type: io.kestra.plugin.gcp.gcs.List
+    from: "{{ inputs.gcs_path }}/"
+
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
+
+outputs:
+  - id: bucket_files
+    type: JSON
+    value: "{{ outputs.list_bucket_files.blobs }}"
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
