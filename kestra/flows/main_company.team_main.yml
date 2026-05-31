@@ -34,6 +34,9 @@ tasks:
     wait: true
     transmitFailed: true
 
+  # ---------------------------------------------------------
+  # 2. VERIFY STAGING TABLE
+  # ---------------------------------------------------------
   - id: ensure_result_table_exists
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
@@ -59,9 +62,13 @@ tasks:
       )
       PARTITION BY DATE(start_timestamp);
 
+  # ---------------------------------------------------------
+  # 3. SPECIAL TRIP DETECTION (PARALLEL)
+  # ---------------------------------------------------------
   - id: foreach_file
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.extract_raw_data.outputs.bucket_files }}"
+    concurrencyLimit: 5
     tasks:
       - id: process_one_file
         type: io.kestra.plugin.core.flow.Sequential
@@ -69,7 +76,7 @@ tasks:
         runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
         tasks:
           # -----------------------------------------------------------------
-          # 1) Load each file into its own raw staging table (no collisions)
+          # 3.1) Load each file into its own raw staging table (no collisions)
           # -----------------------------------------------------------------
           - id: raw_load
             type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
@@ -86,7 +93,7 @@ tasks:
               maxInterval: PT1M
 
           # ------------------------------------------------------------
-          # 2) Subflow appends cleaned rows into staging table
+          # 3.2) Subflow appends cleaned rows into staging table
           # ------------------------------------------------------------
           - id: cleaning_subflow
             type: io.kestra.plugin.core.flow.Subflow
@@ -99,13 +106,13 @@ tasks:
               raw_table: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}"
               ingestion_run_id: "{{ taskrun.parentId }}"
 
-#          # ------------------------------------------------------------
-#          # 3) Drop per-file raw staging table after success
-#          # ------------------------------------------------------------
-#          - id: drop_raw_stage_success
-#            type: io.kestra.plugin.gcp.bigquery.Query
-#            sql: |
-#              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
+          # ------------------------------------------------------------
+          # 3.3) Drop per-file raw staging table after success
+          # ------------------------------------------------------------
+          - id: drop_raw_stage_success
+            type: io.kestra.plugin.gcp.bigquery.Query
+            sql: |
+              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
