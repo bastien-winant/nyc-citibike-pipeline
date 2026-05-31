@@ -1,5 +1,6 @@
 id: data-extract
 namespace: company.team
+description: Fetches the monthly raw data from the source system and stores the data in a GCS bucket
 
 inputs:
   - id: http_uri

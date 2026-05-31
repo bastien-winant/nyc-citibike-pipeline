@@ -18,7 +18,7 @@ variable "location" {
 variable "landing_bucket_name" {
   type        = string
   description = "Name of the GCS bucket that contains the raw Citibike trip data"
-  default     = "citibike-trips"
+  default     = "citibike-trips-landing"
 }
 
 variable "archive_bucket_name" {

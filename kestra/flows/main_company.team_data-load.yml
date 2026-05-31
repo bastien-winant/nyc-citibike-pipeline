@@ -1,6 +1,6 @@
 id: data-load
 namespace: company.team
-description: Load raw data files from GCS to BigQuery
+description: Loads the raw data files from GCS to BigQuery
 
 inputs:
   - id: gcs_path

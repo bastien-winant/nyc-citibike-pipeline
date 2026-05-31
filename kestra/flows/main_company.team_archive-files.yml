@@ -1,5 +1,6 @@
 id: archive-files
 namespace: company.team
+add flow descriptionsdescription: Moves raw data files from the landing GCS bucket to the archive GCS bucket
 
 inputs:
   - id: source_bucket_path

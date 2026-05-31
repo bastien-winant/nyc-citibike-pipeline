@@ -1,6 +1,6 @@
 id: data-transform
 namespace: company.team
-description: Process raw data
+description: Processes raw data and creates aggregation tables
 
 inputs:
   - id: execution_timestamp

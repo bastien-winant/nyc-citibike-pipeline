@@ -1,6 +1,6 @@
 id: gcp-kv
 namespace: company.team
-description: Set key-value entries for GCP resources
+description: Sets key-value entries for GCP resources
 
 tasks:
   - id: gcp_project_id
@@ -19,7 +19,7 @@ tasks:
     type: io.kestra.plugin.core.kv.Set
     key: LANDING_BUCKET_NAME
     kvType: STRING
-    value: citibike-trips-nyc-citibike-pipeline-bw2026
+    value: citibike-trips-landing-nyc-citibike-pipeline-bw2026
 
   - id: archive_bucket_name
     type: io.kestra.plugin.core.kv.Set
