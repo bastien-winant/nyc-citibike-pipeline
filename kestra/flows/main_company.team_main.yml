@@ -39,7 +39,6 @@ tasks:
     sql: |
       CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
       (
-        upload_datetime TIMESTAMP OPTIONS (description = 'Row upload timestamp'),
         ride_id STRING OPTIONS (description = 'Ride ID'),
         rideable_type STRING OPTIONS (description = 'Rideable type'),
         start_timestamp TIMESTAMP OPTIONS (description = 'Started at'),
@@ -52,7 +51,11 @@ tasks:
         end_station_name STRING OPTIONS (description = 'End station name'),
         end_station_lat FLOAT64 OPTIONS (description = 'End latitude'),
         end_station_lng FLOAT64 OPTIONS (description = 'End longitude'),
-        member_casual STRING OPTIONS (description = 'Member or casual ride')
+        member_casual STRING OPTIONS (description = 'Member or casual ride'),
+        source_file STRING,
+        execution_run_id STRING,
+        ingestion_run_id STRING,
+        ingested_at TIMESTAMP
       )
       PARTITION BY DATE(start_timestamp);
 
@@ -65,9 +68,9 @@ tasks:
         allowFailure: true
         runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
         tasks:
-          # ----------------------------------------------------------------
+          # -----------------------------------------------------------------
           # 1) Load each file into its own raw staging table (no collisions)
-          # ----------------------------------------------------------------
+          # -----------------------------------------------------------------
           - id: raw_load
             type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
             from:
@@ -81,6 +84,28 @@ tasks:
               interval: PT5S
               maxAttempt: 6
               maxInterval: PT1M
+
+          # ------------------------------------------------------------
+          # 2) Subflow appends cleaned rows into staging table
+          # ------------------------------------------------------------
+          - id: cleaning_subflow
+            type: io.kestra.plugin.core.flow.Subflow
+            namespace: company.team
+            flowId: upload-retry
+            wait: true
+            inputs:
+              file_name: "{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
+              execution_run_id: "{{ execution.id }}"
+              raw_table: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}"
+              ingestion_run_id: "{{ taskrun.parentId }}"
+
+          # ------------------------------------------------------------
+          # 3) Drop per-file raw staging table after success
+          # ------------------------------------------------------------
+          - id: drop_raw_stage_success
+            type: io.kestra.plugin.gcp.bigquery.Query
+            sql: |
+              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
