@@ -3,8 +3,8 @@ namespace: company.team
 description: ETL pipeline for monthly Citibike trips data
 
 variables:
-#  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  data_month: "202401"
+  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+#  data_month: "202401"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
   landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
   archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
@@ -99,13 +99,13 @@ tasks:
               raw_table: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}"
               ingestion_run_id: "{{ taskrun.parentId }}"
 
-          # ------------------------------------------------------------
-          # 3) Drop per-file raw staging table after success
-          # ------------------------------------------------------------
-          - id: drop_raw_stage_success
-            type: io.kestra.plugin.gcp.bigquery.Query
-            sql: |
-              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
+#          # ------------------------------------------------------------
+#          # 3) Drop per-file raw staging table after success
+#          # ------------------------------------------------------------
+#          - id: drop_raw_stage_success
+#            type: io.kestra.plugin.gcp.bigquery.Query
+#            sql: |
+#              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
