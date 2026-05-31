@@ -13,7 +13,7 @@ tasks:
   # ---------------------------------------------------------
   - id: list_files
     type: io.kestra.plugin.gcp.gcs.List
-    from: "{{ inputs.source_bucket_path }}"
+    from: "{{ inputs.source_bucket_path }}/"
 
   # ---------------------------------------------------------
   # 2a. COPY EACH FILE TO ARCHIVE (PER-FILE)
@@ -47,7 +47,7 @@ tasks:
   - id: foreach_delete
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ outputs.list_files.blobs }}"
-    concurrencyLimit: 10
+    concurrencyLimit: 5
     tasks:
       - id: delete_file
         type: io.kestra.plugin.gcp.gcs.Delete
