@@ -4,7 +4,8 @@ namespace: company.team
 variables:
   data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
-  gcs_path: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ vars.data_month }}"
+  landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
+  archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
 
 tasks:
   # ---------------------------------------------------------
@@ -26,7 +27,7 @@ tasks:
     flowId: data-extract
     inputs:
       http_uri: "{{ render(vars.file_uri) }}"
-      gcs_path: "{{ render(vars.gcs_path) }}"
+      gcs_path: "{{ render(vars.landing_gcs_path) }}"
       data_month: "{{ render(vars.data_month) }}"
     wait: true
     transmitFailed: true
@@ -39,7 +40,7 @@ tasks:
     namespace: company.team
     flowId: data-load
     inputs:
-      gcs_path: "{{ render(vars.gcs_path) }}"
+      gcs_path: "{{ render(vars.landing_gcs_path) }}"
       data_month: "{{ render(vars.data_month) }}"
       execution_timestamp: "{{ execution.startDate }}"
     wait: true
@@ -60,6 +61,19 @@ tasks:
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
+
+  # ---------------------------------------------------------
+  # 4. EXTRACT AND LOAD RAW FILES TO GCS
+  # ---------------------------------------------------------
+  - id: archive_raw_files
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: archive-files
+    inputs:
+      source_bucket_path: "{{ render(vars.landing_gcs_path) }}"
+      target_bucket_path: "{{ render(vars.archive_gcs_path) }}"
+    wait: true
+    transmitFailed: true
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp

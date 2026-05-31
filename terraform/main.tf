@@ -1,5 +1,21 @@
-resource "google_storage_bucket" "raw_data_bucket" {
-  name          = "${var.gcs_bucket_name}-${var.project_id}"
+resource "google_storage_bucket" "landing_data_bucket" {
+  name          = "${var.landing_bucket_name}-${var.project_id}"
+  location      = var.location
+  force_destroy = true
+  storage_class = var.gcs_storage_class
+
+  lifecycle_rule {
+    condition {
+      age = 1
+    }
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
+  }
+}
+
+resource "google_storage_bucket" "archive_data_bucket" {
+  name          = "${var.archive_bucket_name}-${var.project_id}"
   location      = var.location
   force_destroy = true
   storage_class = var.gcs_storage_class

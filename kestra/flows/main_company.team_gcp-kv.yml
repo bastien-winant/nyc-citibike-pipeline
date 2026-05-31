@@ -15,11 +15,17 @@ tasks:
     kvType: STRING
     value: europe-west1
 
-  - id: gcp_bucket_name
+  - id: landing_bucket_name
     type: io.kestra.plugin.core.kv.Set
-    key: GCP_BUCKET_NAME
+    key: LANDING_BUCKET_NAME
     kvType: STRING
-    value: citibike-trips-raw-nyc-citibike-pipeline-bw2026
+    value: citibike-trips-nyc-citibike-pipeline-bw2026
+
+  - id: archive_bucket_name
+    type: io.kestra.plugin.core.kv.Set
+    key: ARCHIVE_BUCKET_NAME
+    kvType: STRING
+    value: citibike-trips-archive-nyc-citibike-pipeline-bw2026
 
   - id: gcp_dataset_raw
     type: io.kestra.plugin.core.kv.Set

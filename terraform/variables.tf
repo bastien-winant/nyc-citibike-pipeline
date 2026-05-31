@@ -15,10 +15,16 @@ variable "location" {
   default     = "europe-west1"
 }
 
-variable "gcs_bucket_name" {
+variable "landing_bucket_name" {
   type        = string
   description = "Name of the GCS bucket that contains the raw Citibike trip data"
-  default     = "citibike-trips-raw"
+  default     = "citibike-trips"
+}
+
+variable "archive_bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket that contains the raw Citibike trip data"
+  default     = "citibike-trips-archive"
 }
 
 variable "gcs_storage_class" {
