@@ -4,7 +4,7 @@ description: ETL pipeline for monthly Citibike trips data
 
 variables:
 #  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  data_month: "202604"
+  data_month: "202401"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
   landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
   archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
