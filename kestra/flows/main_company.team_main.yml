@@ -4,7 +4,6 @@ description: ETL pipeline for monthly Citibike trips data
 
 variables:
   data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-#  data_month: "202401"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
   landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
   archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
@@ -30,7 +29,7 @@ tasks:
     inputs:
       http_uri: "{{ render(vars.file_uri) }}"
       gcs_path: "{{ render(vars.landing_gcs_path) }}"
-      data_month: "{{ render(vars.data_month) }}"
+      data_month: "{{ vars.data_month }}"
     wait: true
     transmitFailed: true
 
@@ -113,6 +112,15 @@ tasks:
             type: io.kestra.plugin.gcp.bigquery.Query
             sql: |
               DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
+
+          # ------------------------------------------------------------
+          # 3.4) Archive + delete original after success
+          # ------------------------------------------------------------
+          - id: copy_to_archive
+            type: io.kestra.plugin.gcp.gcs.Copy
+            from: "{{ parent.taskrun.value | jq('.uri') | first }}"
+            to: "{{ render(vars.landing_gcs_path) }}/{{ inputs.data_month }}-{{ taskrun.iteration }}.parquet"
+            delete: true
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
