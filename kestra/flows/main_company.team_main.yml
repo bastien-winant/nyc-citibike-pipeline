@@ -3,7 +3,8 @@ namespace: company.team
 description: ETL pipeline for monthly Citibike trips data
 
 variables:
-  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+#  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  data_month: "202604"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
   landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
   archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
@@ -119,7 +120,7 @@ tasks:
           - id: copy_to_archive
             type: io.kestra.plugin.gcp.gcs.Copy
             from: "{{ parent.taskrun.value | jq('.uri') | first }}"
-            to: "{{ render(vars.landing_gcs_path) }}/{{ inputs.data_month }}-{{ taskrun.iteration }}.parquet"
+            to: "{{ render(vars.archive_gcs_path) }}/{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
             delete: true
 
 pluginDefaults:

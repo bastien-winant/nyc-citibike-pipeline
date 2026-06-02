@@ -45,8 +45,6 @@ tasks:
             FROM `{{ inputs.raw_table }}`
             WHERE start_station_id IS NOT NULL
             AND end_station_id IS NOT NULL
-            AND TIMESTAMP_TRUNC(TIMESTAMP(started_at), MONTH) =
-              TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
             AND started_at < ended_at
           ) S
           ON T.ride_id = S.ride_id
