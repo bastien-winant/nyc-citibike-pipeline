@@ -23,8 +23,14 @@ variable "landing_bucket_name" {
 
 variable "archive_bucket_name" {
   type        = string
-  description = "Name of the GCS bucket that contains the raw Citibike trip data"
+  description = "Name of the GCS bucket that contains the archived Citibike trip data"
   default     = "citibike-trips-archive"
+}
+
+variable "error_bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket that contains the raw Citibike trip data"
+  default     = "citibike-trips-errors"
 }
 
 variable "gcs_storage_class" {
