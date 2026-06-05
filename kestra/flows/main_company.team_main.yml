@@ -104,6 +104,7 @@ tasks:
             namespace: company.team
             flowId: upload-retry
             wait: true
+            transmitFailed: true
             inputs:
               file_name: "{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
               execution_run_id: "{{ execution.id }}"

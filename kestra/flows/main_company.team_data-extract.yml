@@ -64,6 +64,11 @@ tasks:
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
 
+errors:
+  - id: extract_failed
+    type: io.kestra.plugin.core.execution.Fail
+    errorMessage: "Data extract failed for month {{ inputs.data_month }}."
+
 pluginDefaults:
   - type: io.kestra.plugin.gcp
     values:
