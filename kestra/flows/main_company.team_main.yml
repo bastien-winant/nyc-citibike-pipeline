@@ -159,29 +159,11 @@ tasks:
   # ---------------------------------------------------------
   # 4. AGGREGATIONS (PARALLEL)
   # ---------------------------------------------------------
-  - id: aggregations
-    type: io.kestra.plugin.core.flow.Parallel
-    tasks:
-      - id: trips_per_station
-        type: io.kestra.plugin.gcp.bigquery.Query
-        sql: |
-          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CORE') }}.trips_per_station` AS
-          SELECT
-            start_station_id AS station_id,
-            start_station_name AS station_name,
-            COUNT(*) as trip_count
-          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
-          GROUP BY station_id, station_name;
-
-      - id: trips_by_hour
-        type: io.kestra.plugin.gcp.bigquery.Query
-        sql: |
-          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CORE') }}.trips_by_hour` AS
-          SELECT
-            EXTRACT(HOUR FROM start_timestamp) AS hour,
-            COUNT(*) AS trip_count
-          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
-          GROUP BY hour;
+  - id: transform_subflow
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: data-transform
+    wait: true
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp

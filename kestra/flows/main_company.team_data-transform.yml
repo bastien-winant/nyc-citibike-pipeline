@@ -2,136 +2,16 @@ id: data-transform
 namespace: company.team
 description: Processes raw data and creates aggregation tables
 
-inputs:
-  - id: execution_timestamp
-    type: STRING
-
 tasks:
   # ---------------------------------------------------------
-  # 1. ENSURE STAGING TABLE EXISTS
-  # ---------------------------------------------------------
-  - id: create_stg_trips_table
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
-      (
-        upload_datetime TIMESTAMP OPTIONS (description = 'Row upload timestamp'),
-        ride_id STRING OPTIONS (description = 'Ride ID'),
-        rideable_type STRING OPTIONS (description = 'Rideable type'),
-        start_timestamp TIMESTAMP OPTIONS (description = 'Started at'),
-        end_timestamp TIMESTAMP OPTIONS (description = 'Ended at'),
-        start_station_id STRING OPTIONS (description = 'Start station ID'),
-        start_station_name STRING OPTIONS (description = 'Start station name'),
-        start_station_lat FLOAT64 OPTIONS (description = 'Start latitude'),
-        start_station_lng FLOAT64 OPTIONS (description = 'Start longitude'),
-        end_station_id STRING OPTIONS (description = 'End station ID'),
-        end_station_name STRING OPTIONS (description = 'End station name'),
-        end_station_lat FLOAT64 OPTIONS (description = 'End latitude'),
-        end_station_lng FLOAT64 OPTIONS (description = 'End longitude'),
-        member_casual STRING OPTIONS (description = 'Member or casual ride')
-      )
-      PARTITION BY DATE(start_timestamp);
-
-  # ---------------------------------------------------------
-  # 2. SPECIAL TRIP DETECTION (PARALLEL)
-  # ---------------------------------------------------------
-  - id: classify_trips
-    type: io.kestra.plugin.core.flow.Parallel
-    tasks:
-      # ---------------------------------------------------------
-      # 2.1. STAGING TABLE UPSERT
-      # ---------------------------------------------------------
-      - id: upsert_stg_trips_table
-        type: io.kestra.plugin.gcp.bigquery.Query
-        sql: |
-          MERGE INTO `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips` T
-          USING (
-            SELECT
-              upload_datetime,
-              ride_id,
-              rideable_type,
-              SAFE_CAST(started_at AS TIMESTAMP) AS start_timestamp,
-              SAFE_CAST(ended_at AS TIMESTAMP) AS end_timestamp,
-              RTRIM(start_station_id, '_') AS start_station_id,
-              start_station_name,
-              SAFE_CAST(start_lat AS FLOAT64) AS start_station_lat,
-              SAFE_CAST(start_lng AS FLOAT64) AS start_station_lng,
-              RTRIM(end_station_id, '_') AS end_station_id,
-              end_station_name,
-              SAFE_CAST(end_lat AS FLOAT64) AS end_station_lat,
-              SAFE_CAST(end_lng AS FLOAT64) AS end_station_lng,
-              member_casual
-            FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips`
-            WHERE upload_datetime = TIMESTAMP('{{ inputs.execution_timestamp }}')
-            AND start_station_id IS NOT NULL
-            AND end_station_id IS NOT NULL
-            AND TIMESTAMP_TRUNC(TIMESTAMP(started_at), MONTH) =
-              TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
-            AND started_at < ended_at
-          ) S
-          ON T.ride_id = S.ride_id
-          WHEN MATCHED THEN
-            UPDATE SET
-              T.upload_datetime = S.upload_datetime,
-              T.rideable_type = S.rideable_type,
-              T.start_timestamp = S.start_timestamp,
-              T.end_timestamp = S.end_timestamp,
-              T.start_station_id = S.start_station_id,
-              T.start_station_name = S.start_station_name,
-              T.start_station_lat = S.start_station_lat,
-              T.start_station_lng = S.start_station_lng,
-              T.end_station_id = S.end_station_id,
-              T.end_station_name = S.end_station_name,
-              T.end_station_lat = S.end_station_lat,
-              T.end_station_lng = S.end_station_lng,
-              T.member_casual = S.member_casual
-          WHEN NOT MATCHED THEN
-            INSERT (upload_datetime, ride_id, rideable_type, start_timestamp, end_timestamp, start_station_id,
-                    start_station_name, start_station_lat, start_station_lng, end_station_id, end_station_name,
-                    end_station_lat, end_station_lng, member_casual)
-            VALUES (S.upload_datetime, S.ride_id, S.rideable_type, S.start_timestamp, S.end_timestamp, S.start_station_id,
-                    S.start_station_name, S.start_station_lat, S.start_station_lng, S.end_station_id, S.end_station_name,
-                    S.end_station_lat, S.end_station_lng, S.member_casual)
-
-      # ---------------------------------------------------------
-      # 2.2. TIMESTAMP RELATED ERRORS
-      # ---------------------------------------------------------
-      - id: timestamp_errors
-        type: io.kestra.plugin.gcp.bigquery.Query
-        destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.timestamp_errors"
-        writeDisposition: WRITE_APPEND
-        sql: |
-          SELECT *
-          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips`
-          WHERE upload_datetime = TIMESTAMP('{{ inputs.execution_timestamp }}')
-          AND NOT (
-            TIMESTAMP_TRUNC(TIMESTAMP(started_at), MONTH) =
-              TIMESTAMP_TRUNC(TIMESTAMP('{{ execution.startDate | dateAdd(-1, 'MONTHS') }}'), MONTH)
-            AND started_at <= ended_at
-          );
-
-      # ---------------------------------------------------------
-      # 2.3. MISSING STATION DATA
-      # ---------------------------------------------------------
-      - id: invalid_gps
-        type: io.kestra.plugin.gcp.bigquery.Query
-        destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.invalid_gps"
-        writeDisposition: WRITE_APPEND
-        sql: |
-          SELECT *
-          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.trips`
-          WHERE upload_datetime = TIMESTAMP('{{ inputs.execution_timestamp }}')
-          AND NOT (
-            start_station_id IS NOT NULL
-            AND end_station_id IS NOT NULL
-          );
-
-  # ---------------------------------------------------------
-  # 3. AGGREGATIONS (PARALLEL)
+  # AGGREGATIONS (PARALLEL)
   # ---------------------------------------------------------
   - id: aggregations
     type: io.kestra.plugin.core.flow.Parallel
     tasks:
+      # ---------------------------------------------------------
+      # RIDE COUNT PER STATION
+      # ---------------------------------------------------------
       - id: trips_per_station
         type: io.kestra.plugin.gcp.bigquery.Query
         sql: |
@@ -143,6 +23,9 @@ tasks:
           FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
           GROUP BY station_id, station_name;
 
+      # ---------------------------------------------------------
+      # RIDE COUNT BY HOUR OF DAY
+      # ---------------------------------------------------------
       - id: trips_by_hour
         type: io.kestra.plugin.gcp.bigquery.Query
         sql: |
