@@ -3,8 +3,7 @@ namespace: company.team
 description: ETL pipeline for monthly Citibike trips data
 
 variables:
-#  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
-  data_month: "202401"
+  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
   file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
   landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
   archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
@@ -63,12 +62,16 @@ tasks:
       )
       PARTITION BY DATE(start_timestamp);
 
+  - id: list_bucket_files
+    type: io.kestra.plugin.gcp.gcs.List
+    from: "{{ render(vars.landing_gcs_path) }}/"
+
   # ---------------------------------------------------------
   # 3. STAGING TABLE UPSERT (PARALLEL)
   # ---------------------------------------------------------
   - id: foreach_file
     type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.extract_raw_data.outputs.bucket_files }}"
+    values: "{{ outputs.list_bucket_files.blobs }}"
     concurrencyLimit: 5
     tasks:
       - id: process_one_file
@@ -123,6 +126,7 @@ tasks:
             from: "{{ parent.taskrun.value | jq('.uri') | first }}"
             to: "{{ render(vars.archive_gcs_path) }}/{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
             delete: true
+
         errors:
           # ------------------------------------------------------------
           # A) Roll back rows written for this file + run
