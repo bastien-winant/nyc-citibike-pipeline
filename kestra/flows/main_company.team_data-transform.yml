@@ -1,0 +1,44 @@
+id: data-transform
+namespace: company.team
+description: Processes raw data and creates aggregation tables
+
+tasks:
+  # ---------------------------------------------------------
+  # AGGREGATIONS (PARALLEL)
+  # ---------------------------------------------------------
+  - id: aggregations
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+      # ---------------------------------------------------------
+      # RIDE COUNT PER STATION
+      # ---------------------------------------------------------
+      - id: trips_per_station
+        type: io.kestra.plugin.gcp.bigquery.Query
+        sql: |
+          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CORE') }}.trips_per_station` AS
+          SELECT
+            start_station_id AS station_id,
+            start_station_name AS station_name,
+            COUNT(*) as trip_count
+          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
+          GROUP BY station_id, station_name;
+
+      # ---------------------------------------------------------
+      # RIDE COUNT BY HOUR OF DAY
+      # ---------------------------------------------------------
+      - id: trips_by_hour
+        type: io.kestra.plugin.gcp.bigquery.Query
+        sql: |
+          CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_CORE') }}.trips_by_hour` AS
+          SELECT
+            EXTRACT(HOUR FROM start_timestamp) AS hour,
+            COUNT(*) AS trip_count
+          FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
+          GROUP BY hour;
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      location: "{{ kv('GCP_LOCATION') }}"

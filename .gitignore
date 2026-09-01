@@ -47,6 +47,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py.cover
+*.lcov
 .hypothesis/
 .pytest_cache/
 cover/
@@ -105,30 +106,31 @@ uv.lock
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-# poetry.lock
-# poetry.toml
+poetry.lock
+poetry.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
 #   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
 #   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-# pdm.lock
-# pdm.toml
+pdm.lock
+pdm.toml
 .pdm-python
 .pdm-build/
 
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-# pixi.lock
+pixi.lock
 #   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
 #   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
+.pixi/*
+!.pixi/config.toml
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 
 # Celery stuff
-celerybeat-schedule
+celerybeat-schedule*
 celerybeat.pid
 
 # Redis
@@ -148,7 +150,7 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
+.env*
 .envrc
 .venv
 env/
@@ -181,28 +183,14 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#   and can be added to the global gitignore or merged into this file.  For a more nuclear
-#   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-.idea/
-
-# VS Code
-.vscode/
-
 # Abstra
 #   Abstra is an AI-powered process automation framework.
 #   Ignore directories containing user credentials, local state, and settings.
 #   Learn more at https://abstra.io/docs
 .abstra/
 
-# Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#   you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+# Temporary file for partial code execution
+tempCodeRunnerFile.py
 
 # Ruff stuff:
 .ruff_cache/
@@ -217,3 +205,73 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+### Java
+Thumbs.db
+.DS_Store
+.gradle
+out/
+.idea
+.vscode
+prettierrc.js
+*.iml
+*.ipr
+*.iws
+.project
+.settings
+.classpath
+.attach*
+**/*.class
+**/bin/*
+
+### Configurations
+docker-compose.override.yml
+cli/src/main/resources/application-*.yml
+/local
+
+### Javascript
+node
+node_modules
+yarn-error.log
+yarn.lock
+ui/node_modules
+ui/.env.local
+ui/.env.*.local
+webserver/src/main/resources/ui
+webserver/src/main/resources/views
+ui/coverage
+ui/stats.html
+ui/.frontend-gradle-plugin
+ui/test-report.junit.xml
+ui/frontend.*
+*storybook.log
+storybook-static
+ui-design-system/node_modules
+ui-design-system/dist
+ui-design-system/coverage
+ui-design-system/*.tsbuildinfo
+
+### Docker
+/.env
+docker-compose*.overide.yml
+docker/app/plugins/*.jar
+docker/app/kestra
+docker/app/confs/*.yml
+docker/app/secrets/*.yml
+
+### Build
+core/src/main/resources/gradle.properties
+.plugins.override
+
+# H2 Database
+/data
+
+# Allure Reports
+**/allure-results/*
+
+/jmh-benchmarks/src/main/resources/gradle.properties
+
+# Helm chart dependencies (downloaded at build time, not committed)
+charts/kestra/charts/
+charts/kestra-starter/charts/
+.claude/settings.local.json

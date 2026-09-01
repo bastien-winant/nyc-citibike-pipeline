@@ -1,0 +1,178 @@
+id: main
+namespace: company.team
+description: ETL pipeline for monthly Citibike trips data
+
+variables:
+  data_month: "{{ trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM') }}"
+  file_uri: "https://s3.amazonaws.com/tripdata/{{ vars.data_month }}-citibike-tripdata.zip"
+  landing_gcs_path: "gs://{{ kv('LANDING_BUCKET_NAME') }}/{{ vars.data_month }}"
+  archive_gcs_path: "gs://{{ kv('ARCHIVE_BUCKET_NAME') }}/{{ vars.data_month }}"
+  error_gcs_path: "gs://{{ kv('ERROR_BUCKET_NAME') }}/{{ vars.data_month }}"
+
+tasks:
+  # ---------------------------------------------------------
+  # 0. GCP KV SETUP
+  # ---------------------------------------------------------
+  - id: setup_gcp_kv
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: gcp-kv
+    wait: true
+    transmitFailed: true
+
+  # ---------------------------------------------------------
+  # 1. EXTRACT AND LOAD RAW FILES TO GCS
+  # ---------------------------------------------------------
+  - id: extract_raw_data
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: data-extract
+    inputs:
+      http_uri: "{{ render(vars.file_uri) }}"
+      gcs_path: "{{ render(vars.landing_gcs_path) }}"
+      data_month: "{{ vars.data_month }}"
+    wait: true
+    transmitFailed: true
+
+  # ---------------------------------------------------------
+  # 2. VERIFY STAGING TABLE
+  # ---------------------------------------------------------
+  - id: ensure_result_table_exists
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
+      (
+        ride_id STRING OPTIONS (description = 'Ride ID'),
+        rideable_type STRING OPTIONS (description = 'Rideable type'),
+        start_timestamp TIMESTAMP OPTIONS (description = 'Started at'),
+        end_timestamp TIMESTAMP OPTIONS (description = 'Ended at'),
+        start_station_id STRING OPTIONS (description = 'Start station ID'),
+        start_station_name STRING OPTIONS (description = 'Start station name'),
+        start_station_lat FLOAT64 OPTIONS (description = 'Start latitude'),
+        start_station_lng FLOAT64 OPTIONS (description = 'Start longitude'),
+        end_station_id STRING OPTIONS (description = 'End station ID'),
+        end_station_name STRING OPTIONS (description = 'End station name'),
+        end_station_lat FLOAT64 OPTIONS (description = 'End latitude'),
+        end_station_lng FLOAT64 OPTIONS (description = 'End longitude'),
+        member_casual STRING OPTIONS (description = 'Member or casual ride'),
+        source_file STRING,
+        execution_run_id STRING,
+        ingestion_run_id STRING,
+        ingested_at TIMESTAMP
+      )
+      PARTITION BY DATE(start_timestamp);
+
+  - id: list_bucket_files
+    type: io.kestra.plugin.gcp.gcs.List
+    from: "{{ render(vars.landing_gcs_path) }}/"
+
+  # ---------------------------------------------------------
+  # 3. STAGING TABLE UPSERT (PARALLEL)
+  # ---------------------------------------------------------
+  - id: foreach_file
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.list_bucket_files.blobs }}"
+    concurrencyLimit: 5
+    tasks:
+      - id: process_one_file
+        type: io.kestra.plugin.core.flow.Sequential
+        allowFailure: true
+        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+        tasks:
+          # -----------------------------------------------------------------
+          # 3.1) Load each file into its own raw staging table (no collisions)
+          # -----------------------------------------------------------------
+          - id: raw_load
+            type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
+            from:
+              - "{{ parent.taskrun.value | jq('.uri') | first }}"
+            destinationTable: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}"
+            format: PARQUET
+            autodetect: true
+            writeDisposition: WRITE_TRUNCATE
+            retry:
+              type: exponential
+              interval: PT5S
+              maxAttempt: 6
+              maxInterval: PT1M
+
+          # ------------------------------------------------------------
+          # 3.2) Subflow appends cleaned rows into staging table
+          # ------------------------------------------------------------
+          - id: cleaning_subflow
+            type: io.kestra.plugin.core.flow.Subflow
+            namespace: company.team
+            flowId: upload-retry
+            wait: true
+            transmitFailed: true
+            inputs:
+              file_name: "{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
+              execution_run_id: "{{ execution.id }}"
+              raw_table: "{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}"
+              ingestion_run_id: "{{ taskrun.parentId }}"
+
+          # ------------------------------------------------------------
+          # 3.3) Drop per-file raw staging table after success
+          # ------------------------------------------------------------
+          - id: drop_raw_stage_success
+            type: io.kestra.plugin.gcp.bigquery.Query
+            sql: |
+              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
+
+          # ------------------------------------------------------------
+          # 3.4) Archive + delete original after success
+          # ------------------------------------------------------------
+          - id: copy_to_archive
+            type: io.kestra.plugin.gcp.gcs.Copy
+            from: "{{ parent.taskrun.value | jq('.uri') | first }}"
+            to: "{{ render(vars.archive_gcs_path) }}/{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
+            delete: true
+
+        errors:
+          # ------------------------------------------------------------
+          # A) Roll back rows written for this file + run
+          # ------------------------------------------------------------
+          - id: rollback_final_rows_for_file
+            type: io.kestra.plugin.gcp.bigquery.Query
+            sql: |
+              DELETE FROM `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_STG') }}.trips`
+              WHERE ingestion_run_id = '{{ taskrun.parentId }}'
+                AND source_file = '{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}';
+
+          # ------------------------------------------------------------
+          # B) Drop per-file raw staging table even on error (100%)
+          # ------------------------------------------------------------
+          - id: drop_raw_stage_error
+            type: io.kestra.plugin.gcp.bigquery.Query
+            sql: |
+              DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID' ) }}.{{ kv('GCP_DATASET_RAW') }}.raw_stage_{{ taskrun.parentId }}`;
+
+          # C) Debugging context
+          - id: debug_error_ctx
+            type: io.kestra.plugin.core.debug.Return
+            format: |
+              ==== DEBUG ERROR CONTEXT ====
+              taskrun: {{ taskrun | json }}
+              parent.taskrun: {{ parent.taskrun | json }}
+
+          - id: copy_to_error
+            type: io.kestra.plugin.gcp.gcs.Copy
+            from: "{{ parent.taskrun.value | jq('.uri') | first }}"
+            to: "{{ render(vars.error_gcs_path) }}/{{ parent.taskrun.value | jq('.name') | first | split('/') | last }}"
+            delete: true
+
+  # ---------------------------------------------------------
+  # 4. AGGREGATIONS (PARALLEL)
+  # ---------------------------------------------------------
+  - id: transform_subflow
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.team
+    flowId: data-transform
+    wait: true
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      location: "{{ kv('GCP_LOCATION') }}"

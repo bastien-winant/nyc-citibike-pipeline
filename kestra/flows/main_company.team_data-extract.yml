@@ -1,0 +1,77 @@
+id: data-extract
+namespace: company.team
+description: Fetches the monthly raw data from the source system and stores the data in a GCS bucket
+
+inputs:
+  - id: http_uri
+    type: STRING
+  - id: gcs_path
+    type: STRING
+  - id: data_month
+    type: STRING
+
+tasks:
+  - id: get_zip_file
+    type: io.kestra.plugin.core.http.Download
+    uri: "{{ inputs.http_uri }}"
+
+  - id: unzip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zip_file.uri }}"
+
+  - id: parallel_upload_to_gcs
+    type: io.kestra.plugin.core.flow.ForEach
+    concurrencyLimit: 5
+    values: "{{ outputs.unzip.files | values }}"
+    tasks:
+      - id: csv_to_ion
+        type: io.kestra.plugin.serdes.csv.CsvToIon
+        from: "{{ taskrun.value }}"
+
+      - id: ion_to_parquet
+        type: io.kestra.plugin.serdes.parquet.IonToParquet
+        from: "{{ outputs.csv_to_ion[taskrun.value].uri }}"
+        datetimeFormat: "yyyy-MM-dd' 'HH:mm:ss"
+        schema: |
+          {
+            "type": "record",
+            "name": "Ride",
+            "namespace": "com.example.bikeshare",
+            "fields": [
+              {"name": "ride_id", "type": "string"},
+              {"name": "rideable_type", "type": "string"},
+              {"name": "started_at", "type": "string"},
+              {"name": "ended_at", "type": "string"},
+              {"name": "start_station_name", "type": "string"},
+              {"name": "start_station_id", "type": "string"},
+              {"name": "end_station_name", "type": "string"},
+              {"name": "end_station_id", "type": "string"},
+              {"name": "start_lat", "type": "string"},
+              {"name": "start_lng", "type": "string"},
+              {"name": "end_lat", "type": "string"},
+              {"name": "end_lng", "type": "string"},
+              {"name": "member_casual", "type": "string"}
+            ]
+          }
+
+      - id: gcs_load_raw
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ outputs.ion_to_parquet[taskrun.value].uri }}"
+        to: "{{ inputs.gcs_path }}/{{ inputs.data_month }}-{{ taskrun.iteration }}.parquet"
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+errors:
+  - id: extract_failed
+    type: io.kestra.plugin.core.execution.Fail
+    errorMessage: "Data extract failed for month {{ inputs.data_month }}."
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      location: "{{ kv('GCP_LOCATION') }}"
