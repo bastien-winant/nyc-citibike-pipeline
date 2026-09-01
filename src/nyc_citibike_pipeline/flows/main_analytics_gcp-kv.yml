@@ -1,0 +1,39 @@
+id: gcp-kv
+namespace: analytics
+
+tasks:
+  - id: gcp_project_id
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_PROJECT_ID
+    kvType: STRING
+    value: nyc-citibike-pipeline-bw2026
+
+  - id: gcp_location
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_LOCATION
+    kvType: STRING
+    value: europe-west1
+
+  - id: gcp_bucket_name
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_BUCKET_NAME
+    kvType: STRING
+    value: nyc-citibike-pipeline-bw2026_raw-trips
+
+  - id: gcp_raw_dataset
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_RAW_DATASET
+    kvType: STRING
+    value: raw
+
+  - id: gcp_stg_dataset
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_STG_DATASET
+    kvType: STRING
+    value: stg
+
+  - id: gcp_core_dataset
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_CORE_DATASET
+    kvType: STRING
+    value: core

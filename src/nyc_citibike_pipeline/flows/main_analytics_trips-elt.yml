@@ -1,0 +1,102 @@
+id: trips-elt
+namespace: analytics
+
+tasks:
+
+  # ---------------------------------------------------------
+  # 0. TRIGGER SUBFLOW (Set GCP Key-Values)
+  # ---------------------------------------------------------
+  - id: set_gcp_kv
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: analytics
+    flowId: gcp-kv
+    wait: true
+  
+  # ---------------------------------------------------------
+  # 1. TRIGGER SUBFLOW (Data ingestion)
+  # ---------------------------------------------------------
+  - id: ingest_raw_data
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: analytics
+    flowId: trips-ingest
+    wait: true
+
+  # ---------------------------------------------------------
+  # 2. LIST INPUT FILES
+  # ---------------------------------------------------------
+  - id: list_files
+    type: io.kestra.plugin.gcp.gcs.List
+    from: "gs://{{kv('GCP_BUCKET_NAME')}}"
+
+  # ---------------------------------------------------------
+  # 3. PARALLEL GCS -> BIGQUERY RAW INGESTION
+  # ---------------------------------------------------------
+  - id: foreach_file
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.list_files.blobs }}"
+    concurrencyLimit: 5
+    tasks:
+      - id: load_raw
+        type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
+        from: "{{ taskrun.value | jq('.uri') | first }}"
+        destinationTable: "{{kv('GCP_RAW_DATASET')}}.raw_trips"
+        format: PARQUET
+        writeDisposition: WRITE_APPEND
+        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+
+
+  # ---------------------------------------------------------
+  # 4. TRIGGER SUBFLOW (BigQuery transformations)
+  # ---------------------------------------------------------
+  
+  # ---------------------------------------------------------
+  # 5a. COPY EACH FILE TO ARCHIVE (PER-FILE) 
+  # ---------------------------------------------------------
+  - id: foreach_copy
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.list_files.blobs }}"
+    concurrencyLimit: 10
+    tasks:
+      - id: debug_blobs
+        type: io.kestra.plugin.core.debug.Return
+        format: |
+          URI: {{ taskrun.value | jq('.uri') | first }}
+          NAME: {{ taskrun.value | jq('.name') | first }}
+          SIZE: {{ taskrun.value | jq('.size') | first }}
+            
+      - id: copy_to_archive
+        type: io.kestra.plugin.gcp.gcs.Copy
+        from: "{{ taskrun.value | jq('.uri') | first }}"
+        to: "gs://{{kv('GCP_BUCKET_NAME')}}/citibike-trips-archive/{{ taskrun.value | jq('.name') | first | split(\"/\") | last }}"
+        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+
+  # 🔥 BARRIER — IMPORTANT!?
+  - id: wait_for_copy
+    type: io.kestra.plugin.core.debug.Return
+    format: "Copy completed"
+
+  # ---------------------------------------------------------
+  # 5b. DELETE EACH FILE (PER-FILE)
+  # ---------------------------------------------------------
+  - id: foreach_delete
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.list_files.blobs }}"
+    concurrencyLimit: 10
+    tasks:
+      - id: delete_file
+        type: io.kestra.plugin.gcp.gcs.Delete
+        uri: "{{ taskrun.value | jq('.uri') | first }}"
+        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{secret('GCP_CREDS')}}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"

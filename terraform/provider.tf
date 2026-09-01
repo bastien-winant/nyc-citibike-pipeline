@@ -2,13 +2,13 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "7.32.0"
+      version = "8.1.0"
     }
   }
 }
 
 provider "google" {
   project     = var.project_id
-  region      = var.location
+  region      = var.region
   credentials = file(var.credentials)
 }

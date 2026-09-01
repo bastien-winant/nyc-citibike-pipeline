@@ -1,0 +1,51 @@
+id: trips-ingest
+namespace: analytics
+
+variables:
+  # file_id: "{{ trigger.date  | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
+  file_id: "{{ execution.startDate | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
+  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file}}"
+
+tasks:
+  - id: get_zip_file
+    type: io.kestra.plugin.core.http.Download
+    uri: https://s3.amazonaws.com/tripdata/202401-citibike-tripdata.zip
+
+  - id: unzip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zip_file.uri }}"
+
+  - id: parallel_upload_to_gcs
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.unzip.files }}"
+    concurrencyLimit: 5
+    tasks:
+      - id: 1st
+        type: io.kestra.plugin.core.debug.Return
+        format: "{{ task.id }} with value {{ taskrun.value }}"
+
+      - id: 2nd
+        type: io.kestra.plugin.core.debug.Return
+        format: "{{ task.id }} > {{ taskrun.startDate }}"
+
+      - id: 3rd
+        type: io.kestra.plugin.core.debug.Return
+        format: "{{ task.id }} > {{ taskrun.id }}"
+
+      - id: upload
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ taskrun.value }}"
+        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ taskrun.value }}"
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{secret('GCP_CREDS')}}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"
