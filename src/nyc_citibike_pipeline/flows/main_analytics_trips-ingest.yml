@@ -4,7 +4,7 @@ namespace: analytics
 variables:
   # file_id: "{{ trigger.date  | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
   file_id: "{{ execution.startDate | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
-  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file}}"
+  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}"
 
 tasks:
   - id: get_zip_file
@@ -21,13 +21,44 @@ tasks:
     values: "{{ outputs.unzip.files | values }}"
     concurrencyLimit: 5
     tasks:
-      - id: taskrun_id
-        type: io.kestra.plugin.core.log.Log
-        message: "value: {{ taskrun.id }}"
-
       - id: taskrun_value
         type: io.kestra.plugin.core.log.Log
-        message: "value: {{ taskrun.value }}"
+        message: "gs://{{kv('GCP_BUCKET_NAME')}}/render({{vars.file_id}})-{{ taskrun.id }}.csv"
+
+      - id: csv_to_ion
+        type: io.kestra.plugin.serdes.csv.CsvToIon
+        from: "{{ taskrun.value }}"
+        header: true
+
+      - id: ion_to_avro
+        type: io.kestra.plugin.serdes.avro.IonToAvro
+        from: "{{ outputs.csv_to_ion.uri }}"
+        schema: |
+          {
+            "type": "record",
+            "name": "Ride",
+            "namespace": "com.example.ride",
+            "fields": [
+              {"name": "ride_id", "type": "string"},
+              {"name": "rideable_type", "type": "string"},
+              {"name": "started_at", "type": "string"},
+              {"name": "ended_at", "type": "string"},
+              {"name": "start_station_name", "type": "string"},
+              {"name": "start_station_id", "type": "string"},
+              {"name": "end_station_name", "type": "string"},
+              {"name": "end_station_id", "type": "string"},
+              {"name": "start_lat", "type": "double"},
+              {"name": "start_lng", "type": "double"},
+              {"name": "end_lat", "type": "double"},
+              {"name": "end_lng", "type": "double"},
+              {"name": "member_casual", "type": "string"}
+            ]
+          }
+
+      - id: upload_to_gcs
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ outputs.ion_to_avro.uri }}"
+        to: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}-{{ taskrun.id }}.avro"
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
@@ -36,7 +67,7 @@ tasks:
 pluginDefaults:
   - type: io.kestra.plugin.gcp
     values:
-      serviceAccount: "{{secret('GCP_CREDS')}}"
+      serviceAccount: "{{kv('GCP_CREDS')}}"
       projectId: "{{kv('GCP_PROJECT_ID')}}"
       location: "{{kv('GCP_LOCATION')}}"
       bucket: "{{kv('GCP_BUCKET_NAME')}}"
