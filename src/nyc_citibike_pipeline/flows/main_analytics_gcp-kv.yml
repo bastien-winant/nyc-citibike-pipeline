@@ -8,6 +8,12 @@ tasks:
     kvType: STRING
     value: nyc-citibike-pipeline-bw2026
 
+  - id: gcp_project_region
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_PROJECT_REGION
+    kvType: STRING
+    value: europe-west1
+
   - id: gcp_location
     type: io.kestra.plugin.core.kv.Set
     key: GCP_LOCATION
