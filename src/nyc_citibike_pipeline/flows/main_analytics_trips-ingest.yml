@@ -18,25 +18,16 @@ tasks:
 
   - id: parallel_upload_to_gcs
     type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.unzip.files }}"
+    values: "{{ outputs.unzip.files | values }}"
     concurrencyLimit: 5
     tasks:
-      - id: 1st
-        type: io.kestra.plugin.core.debug.Return
-        format: "{{ task.id }} with value {{ taskrun.value }}"
+      - id: taskrun_id
+        type: io.kestra.plugin.core.log.Log
+        message: "value: {{ taskrun.id }}"
 
-      - id: 2nd
-        type: io.kestra.plugin.core.debug.Return
-        format: "{{ task.id }} > {{ taskrun.startDate }}"
-
-      - id: 3rd
-        type: io.kestra.plugin.core.debug.Return
-        format: "{{ task.id }} > {{ taskrun.id }}"
-
-      - id: upload
-        type: io.kestra.plugin.gcp.gcs.Upload
-        from: "{{ taskrun.value }}"
-        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/{{ taskrun.value }}"
+      - id: taskrun_value
+        type: io.kestra.plugin.core.log.Log
+        message: "value: {{ taskrun.value }}"
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
