@@ -21,7 +21,7 @@ tasks:
         type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
         from:
           - "{{ taskrun.value | jq('.uri') | first }}"
-        destinationTable: "{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_RAW_DATASET')}}.raw_trips"
+        destinationTable: "{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_RAW_DATASET')}}.trips"
         format: AVRO
         avroOptions:
           useAvroLogicalTypes: true
