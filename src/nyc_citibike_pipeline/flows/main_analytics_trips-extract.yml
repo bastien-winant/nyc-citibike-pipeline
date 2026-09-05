@@ -1,0 +1,73 @@
+id: trips-extract
+namespace: analytics
+
+inputs:
+  - id: zip_uri
+    type: STRING
+    
+  - id: gcs_file
+    type: STRING
+
+tasks:
+  - id: get_zip_file
+    type: io.kestra.plugin.core.http.Download
+    uri: "{{inputs.zip_uri}}"
+
+  - id: unzip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zip_file.uri }}"
+
+  - id: parallel_upload_to_gcs
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.unzip.files | values }}"
+    concurrencyLimit: 5
+    tasks:
+      - id: csv_to_ion
+        type: io.kestra.plugin.serdes.csv.CsvToIon
+        from: "{{ taskrun.value }}"
+        header: true
+
+      - id: ion_to_avro
+        type: io.kestra.plugin.serdes.avro.IonToAvro
+        from: "{{ outputs.csv_to_ion[taskrun.value].uri }}"
+        datetimeFormat: "yyyy-MM-dd' 'HH:mm:ss"
+        schema: |
+          {
+            "type": "record",
+            "name": "Ride",
+            "namespace": "com.example.ride",
+            "fields": [
+              {"name": "ride_id", "type": "string"},
+              {"name": "rideable_type", "type": "string"},
+              {"name": "started_at", "type": "string", "logicalType": "local-timestamp-millis"},
+              {"name": "ended_at", "type": "string", "logicalType": "local-timestamp-millis"},
+              {"name": "start_station_name", "type": "string"},
+              {"name": "start_station_id", "type": "string"},
+              {"name": "end_station_name", "type": "string"},
+              {"name": "end_station_id", "type": "string"},
+              {"name": "start_lat", "type": "string"},
+              {"name": "start_lng", "type": "string"},
+              {"name": "end_lat", "type": "string"},
+              {"name": "end_lng", "type": "string"},
+              {"name": "member_casual", "type": "string"}
+            ]
+          }
+
+      - id: upload_to_gcs
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ outputs.ion_to_avro[taskrun.value].uri }}"
+        to: "{{inputs.gcs_file}}-{{ taskrun.iteration }}.avro"
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{kv('GCP_CREDS')}}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"
