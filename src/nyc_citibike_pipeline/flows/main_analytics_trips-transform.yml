@@ -9,29 +9,6 @@ inputs:
     type: STRING
 
 tasks:
-  - id: bq_trips_table_partitioned
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_RAW_DATASET')}}.trips_partitioned`
-      (
-        ride_id STRING OPTIONS (description="Unique identifier for the ride"),
-        rideable_type STRING OPTIONS (description="Type of bike used for the ride"),
-        started_at TIMESTAMP OPTIONS (description="Timestamp when the ride was started"),
-        ended_at TIMESTAMP OPTIONS (description="Timestamp when the ride was ended"),
-        start_station_id STRING OPTIONS (description="Unique identifier for the start station"),
-        start_station_name STRING OPTIONS (description="Name of the station where the ride started"),
-        end_station_id STRING OPTIONS (description="Unique identifier for the end station"),
-        end_station_name STRING OPTIONS (description="Name of the station where the ride ended"),
-        start_lat STRING OPTIONS (description="Latitude of the start location"),
-        start_lng STRING OPTIONS (description="Longitude of the start location"),
-        end_lat STRING OPTIONS (description="Latitude of the end location"),
-        end_lng STRING OPTIONS (description="Longitude of the end location"),
-        member_casual STRING OPTIONS (description="Type of member (casual or member)"),
-        filename STRING OPTIONS (description="Name of the file from which this data was loaded"),
-        uploaded_at TIMESTAMP OPTIONS (description="Timestamp when this data was loaded into BigQuery")
-      )
-      PARTITION BY DATE(started_at);
-
   - id: bq_trip_table_ext
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
@@ -61,6 +38,7 @@ tasks:
     destinationTable: "{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_RAW_DATASET')}}.trips"
     createDisposition: CREATE_IF_NEEDED
     writeDisposition: WRITE_APPEND
+    timePartitioningField: started_at
     sql: |
       SELECT
         ride_id,
