@@ -5,7 +5,7 @@ inputs:
   - id: zip_uri
     type: STRING
     
-  - id: gcs_file
+  - id: gcs_path
     type: STRING
 
 tasks:
@@ -57,7 +57,7 @@ tasks:
       - id: upload_to_gcs
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ outputs.ion_to_avro[taskrun.value].uri }}"
-        to: "{{inputs.gcs_file}}-{{ taskrun.iteration }}.avro"
+        to: "{{inputs.gcs_path}}-{{ taskrun.iteration }}.avro"
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles

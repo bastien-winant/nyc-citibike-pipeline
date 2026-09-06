@@ -4,7 +4,7 @@ namespace: analytics
 variables:
   # file_id: "{{ trigger.date  | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
   # file_id: "{{ execution.startDate | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
-  file_id: "202401"
+  file_id: "202403"
 
 tasks:
 
@@ -26,7 +26,7 @@ tasks:
     flowId: trips-extract
     inputs:
       zip_uri: "https://s3.amazonaws.com/tripdata/{{vars.file_id}}-citibike-tripdata.zip"
-      gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}"
+      gcs_path: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}"
     wait: true
 
   # ---------------------------------------------------------
@@ -56,13 +56,13 @@ tasks:
     namespace: analytics
     flowId: trips-transform
     inputs:
-      execution_timestamp: "{{execution.startDate}}"
+      execution_timestamp: "{{ execution.startDate | date('yyyy-MM-dd HH:mm:ss') }}"
       gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}"
     wait: true
 
 
   # ---------------------------------------------------------
-  # 5. COPY EACH FILE TO ARCHIVE (PER-FILE)
+  # 5. COPY EACH FILE TO ARCHIVE (per-file)
   # ---------------------------------------------------------
   - id: archive_raw_data
     type: io.kestra.plugin.core.flow.Subflow
