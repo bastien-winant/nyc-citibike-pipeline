@@ -8,13 +8,9 @@ inputs:
 
 
 tasks:
-  - id: list_files
-    type: io.kestra.plugin.gcp.gcs.List
-    from: "gs://{{kv('GCP_BUCKET_NAME')}}"
-
   - id: foreach_copy
     type: io.kestra.plugin.core.flow.ForEach
-    values: "{{ outputs.list_files.blobs }}"
+    values: "{{ inputs.blobs }}"
     concurrencyLimit: 10
     tasks:
       - id: debug_blobs
