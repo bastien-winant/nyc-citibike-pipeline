@@ -4,7 +4,7 @@ namespace: analytics
 variables:
   # file_id: "{{ trigger.date  | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
   # file_id: "{{ execution.startDate | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
-  file_id: "202402"
+  file_id: "202403"
 
 tasks:
 
@@ -45,7 +45,7 @@ tasks:
   - id: process_raw_data
     type: io.kestra.plugin.core.flow.Subflow
     namespace: analytics
-    flowId: trips-transform
+    flowId: trips-load
     inputs:
       execution_timestamp: "{{ execution.startDate | date('yyyy-MM-dd HH:mm:ss') }}"
       gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file_id}}"
