@@ -1,0 +1,7 @@
+id: trips-transform
+namespace: analytics
+
+tasks:
+  - id: hello_world
+    type: io.kestra.plugin.core.log.Log
+    message: Hello World!

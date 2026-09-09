@@ -4,7 +4,7 @@ namespace: analytics
 variables:
   # file_id: "{{ trigger.date  | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
   # file_id: "{{ execution.startDate | dateAdd(-3, 'MONTHS') | date('yyyyMM') }}"
-  file_id: "202403"
+  file_id: "202404"
 
 tasks:
 
@@ -20,7 +20,7 @@ tasks:
   # ---------------------------------------------------------
   # 1. TRIGGER SUBFLOW (Data ingestion)
   # ---------------------------------------------------------
-  - id: extract_raw_data
+  - id: extract_data
     type: io.kestra.plugin.core.flow.Subflow
     namespace: analytics
     flowId: trips-extract
@@ -39,10 +39,10 @@ tasks:
     projectId: "{{kv('GCP_PROJECT_ID')}}"
 
 
-  # ---------------------------------------------------------
-  # 3. TRIGGER SUBFLOW (BigQuery transformations)
-  # ---------------------------------------------------------
-  - id: process_raw_data
+  # -------------------------------------------------------------------------------
+  # 3. TRIGGER SUBFLOW (Parallel GCS -> BigQuery raw ingestion and cleaning)
+  # -------------------------------------------------------------------------------
+  - id: load_data
     type: io.kestra.plugin.core.flow.Subflow
     namespace: analytics
     flowId: trips-load
@@ -53,7 +53,16 @@ tasks:
 
 
   # ---------------------------------------------------------
-  # 4. COPY EACH FILE TO ARCHIVE (per-file)
+  # 4. TRIGGER SUBFLOW (BigQuery transformations)
+  # ---------------------------------------------------------
+  - id: transform_data
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: analytics
+    flowId: trips-transform
+    wait: true
+  
+  # ---------------------------------------------------------
+  # 5. COPY EACH FILE TO ARCHIVE (per-file)
   # ---------------------------------------------------------
   - id: archive_raw_data
     type: io.kestra.plugin.core.flow.Subflow
