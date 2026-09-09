@@ -9,29 +9,15 @@ inputs:
 
 tasks:
   - id: foreach_copy
-    type: io.kestra.plugin.core.flow.ForEach
+    type: io.kestra.plugin.core.flow.Loop
     values: "{{ inputs.blobs }}"
     concurrencyLimit: 10
     tasks:
-      - id: debug_blobs
-        type: io.kestra.plugin.core.debug.Return
-        format: |
-          URI: {{ taskrun.value | jq('.uri') | first }}
-          NAME: {{ taskrun.value | jq('.name') | first }}
-          SIZE: {{ taskrun.value | jq('.size') | first }}
-            
       - id: copy_to_archive
         type: io.kestra.plugin.gcp.gcs.Copy
-        from: "{{ taskrun.value | jq('.uri') | first }}"
-        to: "gs://{{kv('GCP_BUCKET_NAME')}}/citibike-trips-archive/{{ taskrun.value | jq('.name') | first | split(\"/\") | last }}"
-        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+        serviceAccount: "{{secret('GCP_CREDS')}}"
+        projectId: "{{kv('GCP_PROJECT_ID')}}"
+        from: "{{ item.value | jq('.uri') | first }}"
+        to: "gs://{{kv('GCP_BUCKET_NAME')}}/citibike-trips-archive/{{ item.value | jq('.name') | first | split(\"/\") | last }}"
+        runIf: "{{ item.value | jq('.size') | first > 0 }}"
         delete: true
-
-
-pluginDefaults:
-  - type: io.kestra.plugin.gcp
-    values:
-      serviceAccount: "{{secret('GCP_CREDS')}}"
-      projectId: "{{kv('GCP_PROJECT_ID')}}"
-      location: "{{kv('GCP_LOCATION')}}"
-      bucket: "{{kv('GCP_BUCKET_NAME')}}"

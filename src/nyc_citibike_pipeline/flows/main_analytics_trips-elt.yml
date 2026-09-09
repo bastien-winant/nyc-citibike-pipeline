@@ -35,21 +35,12 @@ tasks:
   - id: list_files
     type: io.kestra.plugin.gcp.gcs.List
     from: "gs://{{kv('GCP_BUCKET_NAME')}}"
-
-  # # ---------------------------------------------------------
-  # # 3. PARALLEL GCS -> BIGQUERY RAW INGESTION
-  # # ---------------------------------------------------------
-  # - id: load_raw_data
-  #   type: io.kestra.plugin.core.flow.Subflow
-  #   namespace: analytics
-  #   flowId: trips-load
-  #   inputs:
-  #     blobs: "{{ outputs.list_files.blobs }}"
-  #   wait: true
+    serviceAccount: "{{secret('GCP_CREDS')}}"
+    projectId: "{{kv('GCP_PROJECT_ID')}}"
 
 
   # ---------------------------------------------------------
-  # 4. TRIGGER SUBFLOW (BigQuery transformations)
+  # 3. TRIGGER SUBFLOW (BigQuery transformations)
   # ---------------------------------------------------------
   - id: process_raw_data
     type: io.kestra.plugin.core.flow.Subflow
@@ -62,7 +53,7 @@ tasks:
 
 
   # ---------------------------------------------------------
-  # 5. COPY EACH FILE TO ARCHIVE (per-file)
+  # 4. COPY EACH FILE TO ARCHIVE (per-file)
   # ---------------------------------------------------------
   - id: archive_raw_data
     type: io.kestra.plugin.core.flow.Subflow
@@ -76,11 +67,3 @@ tasks:
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
-
-pluginDefaults:
-  - type: io.kestra.plugin.gcp
-    values:
-      serviceAccount: "{{secret('GCP_CREDS')}}"
-      projectId: "{{kv('GCP_PROJECT_ID')}}"
-      location: "{{kv('GCP_LOCATION')}}"
-      bucket: "{{kv('GCP_BUCKET_NAME')}}"

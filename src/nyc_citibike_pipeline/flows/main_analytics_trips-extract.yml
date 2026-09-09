@@ -19,18 +19,18 @@ tasks:
     from: "{{ outputs.get_zip_file.uri }}"
 
   - id: parallel_upload_to_gcs
-    type: io.kestra.plugin.core.flow.ForEach
+    type: io.kestra.plugin.core.flow.Loop
     values: "{{ outputs.unzip.files | values }}"
     concurrencyLimit: 5
     tasks:
       - id: csv_to_ion
         type: io.kestra.plugin.serdes.csv.CsvToIon
-        from: "{{ taskrun.value }}"
+        from: "{{ item.value }}"
         header: true
 
       - id: ion_to_avro
         type: io.kestra.plugin.serdes.avro.IonToAvro
-        from: "{{ outputs.csv_to_ion[taskrun.value].uri }}"
+        from: "{{ outputs.csv_to_ion.uri }}"
         datetimeFormat: "yyyy-MM-dd' 'HH:mm:ss"
         schema: |
           {
@@ -56,18 +56,11 @@ tasks:
 
       - id: upload_to_gcs
         type: io.kestra.plugin.gcp.gcs.Upload
-        from: "{{ outputs.ion_to_avro[taskrun.value].uri }}"
-        to: "{{inputs.gcs_path}}-{{ taskrun.iteration }}.avro"
+        from: "{{ outputs.ion_to_avro.uri }}"
+        to: "{{inputs.gcs_path}}-{{ item.index }}.avro"
+        serviceAccount: "{{secret('GCP_CREDS')}}"
+        projectId: "{{kv('GCP_PROJECT_ID')}}"
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
-
-
-pluginDefaults:
-  - type: io.kestra.plugin.gcp
-    values:
-      serviceAccount: "{{secret('GCP_CREDS')}}"
-      projectId: "{{kv('GCP_PROJECT_ID')}}"
-      location: "{{kv('GCP_LOCATION')}}"
-      bucket: "{{kv('GCP_BUCKET_NAME')}}"

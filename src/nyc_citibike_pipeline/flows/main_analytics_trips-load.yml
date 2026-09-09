@@ -9,21 +9,21 @@ inputs:
 
 tasks:
   - id: foreach_file
-    type: io.kestra.plugin.core.flow.ForEach
+    type: io.kestra.plugin.core.flow.Loop
     values: "{{ inputs.blobs }}"
     concurrencyLimit: 5
     tasks:
       - id: load_raw
         type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
         from:
-          - "{{ taskrun.value | jq('.uri') | first }}"
+          - "{{ item.value | jq('.uri') | first }}"
         destinationTable: "{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_RAW_DATASET')}}.trips"
         format: AVRO
         avroOptions:
           useAvroLogicalTypes: true
         location: "{{kv('GCP_PROJECT_REGION')}}"
         writeDisposition: WRITE_APPEND
-        runIf: "{{ taskrun.value | jq('.size') | first > 0 }}"
+        runIf: "{{ item.value | jq('.size') | first > 0 }}"
 
 
 pluginDefaults:
