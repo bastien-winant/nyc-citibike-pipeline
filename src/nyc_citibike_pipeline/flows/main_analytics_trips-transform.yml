@@ -2,6 +2,37 @@ id: trips-transform
 namespace: analytics
 
 tasks:
-  - id: hello_world
-    type: io.kestra.plugin.core.log.Log
-    message: Hello World!
+  - id: aggregations
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+      # Trips by day of week
+      - id: trips_by_dow
+        type: io.kestra.plugin.gcp.bigquery.Query
+        serviceAccount: "{{secret('GCP_CREDS')}}"
+        projectId: "{{kv('GCP_PROJECT_ID')}}"
+        location: "{{kv('GCP_LOCATION')}}"
+        sql: |
+          CREATE OR REPLACE TABLE
+            `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_CORE_DATASET')}}.trips_by_dow` AS
+          SELECT
+            EXTRACT(DAYOFWEEK FROM started_at) AS dow,
+            COUNT(*) AS trip_count,
+            AVG(DATETIME_DIFF(ended_at, started_at, MINUTE)) AS avg_trip_length
+          FROM `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_STG_DATASET')}}.trips`
+          GROUP BY dow;
+
+      # Trips by hour of day
+      - id: trips_by_hour
+        type: io.kestra.plugin.gcp.bigquery.Query
+        serviceAccount: "{{secret('GCP_CREDS')}}"
+        projectId: "{{kv('GCP_PROJECT_ID')}}"
+        location: "{{kv('GCP_LOCATION')}}"
+        sql: |
+          CREATE OR REPLACE TABLE
+            `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_CORE_DATASET')}}.trips_by_hour` AS
+          SELECT
+            EXTRACT(HOUR FROM started_at) AS hour,
+            COUNT(*) AS trip_count,
+            AVG(DATETIME_DIFF(ended_at, started_at, MINUTE)) AS avg_trip_length
+          FROM `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_STG_DATASET')}}.trips`
+          GROUP BY hour;
